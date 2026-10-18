@@ -1,0 +1,189 @@
+"""Validation functions for the Clinic Management System."""
+
+VALID_STATUSES = {"pending", "completed", "cancelled"}
+
+
+def validate_patient(patient_id, patients):
+    if not isinstance(patient_id, str) or not patient_id.strip():
+        return False, "Patient ID must be a non-empty string."
+
+    if patient_id not in patients:
+        return False, f"Patient {patient_id} does not exist."
+
+    patient = patients[patient_id]
+
+    if not isinstance(patient, dict):
+        return False, "Patient data must be a dictionary."
+
+    age = patient.get("age")
+
+    if isinstance(age, bool) or not isinstance(age, int) or age < 0:
+        return False, "Patient age must be a non-negative integer."
+
+    return True, "Patient exists."
+def validate_doctor(doctor_id, doctors):
+    """Check whether a doctor exists."""
+    if not isinstance(doctor_id, str) or not doctor_id.strip():
+        return False, "Doctor ID must be a non-empty string."
+
+    if doctor_id not in doctors:
+        return False, f"Doctor {doctor_id} does not exist."
+
+    return True, "Doctor exists."
+
+
+def validate_doctor_availability(doctor_id, doctors):
+    """Check whether an existing doctor is available."""
+    result = validate_doctor(doctor_id, doctors)
+
+    if not result[0]:
+        return result
+
+    if doctors[doctor_id].get("available") is not True:
+        return False, f"Doctor {doctor_id} is not available."
+
+    return True, "Doctor is available."
+
+
+def validate_appointment_status(status):
+    """Accept only the supported appointment statuses."""
+    if not isinstance(status, str):
+        return False, "Appointment status must be a string."
+
+    if status not in VALID_STATUSES:
+        return False, (
+            f"Invalid appointment status '{status}'. "
+            f"Allowed statuses: {', '.join(sorted(VALID_STATUSES))}."
+        )
+
+    return True, "Appointment status is valid."
+
+
+def validate_tests(tests, test_prices):
+    """Validate the test list, including invalid and duplicate tests."""
+    if not isinstance(tests, list):
+        return False, "Tests must be provided as a list."
+
+    seen_tests = set()
+
+    for test in tests:
+        if not isinstance(test, str) or not test.strip():
+            return False, "Each test name must be a non-empty string."
+
+        if test not in test_prices:
+            return False, f"Medical test '{test}' does not exist."
+
+        if test in seen_tests:
+            return False, f"Duplicate medical test '{test}' is not allowed."
+
+        price = test_prices[test]
+
+        if (
+            isinstance(price, bool)
+            or not isinstance(price, (int, float))
+            or price < 0
+        ):
+            return False, f"Invalid price for medical test '{test}'."
+
+        seen_tests.add(test)
+
+    return True, "All medical tests are valid."
+
+
+def validate_patient_data(patient):
+    """Validate the required patient fields and age."""
+    if not isinstance(patient, dict):
+        return False, "Patient data must be a dictionary."
+
+    name = patient.get("name")
+    age = patient.get("age")
+    city = patient.get("city")
+    insurance = patient.get("insurance")
+
+    if not isinstance(name, str) or not name.strip():
+        return False, "Patient name must be a non-empty string."
+
+    if isinstance(age, bool) or not isinstance(age, int) or age < 0:
+        return False, "Patient age must be a non-negative integer."
+
+    if not isinstance(city, str) or not city.strip():
+        return False, "Patient city must be a non-empty string."
+
+    if not isinstance(insurance, bool):
+        return False, "Patient insurance must be True or False."
+
+    return True, "Patient data is valid."
+
+
+def validate_doctor_data(doctor):
+    """Validate the required doctor fields."""
+    if not isinstance(doctor, dict):
+        return False, "Doctor data must be a dictionary."
+
+    name = doctor.get("name")
+    specialization = doctor.get("specialization")
+    fee = doctor.get("fee")
+    available = doctor.get("available")
+
+    if not isinstance(name, str) or not name.strip():
+        return False, "Doctor name must be a non-empty string."
+
+    if not isinstance(specialization, str) or not specialization.strip():
+        return False, "Doctor specialization must be a non-empty string."
+
+    if (
+        isinstance(fee, bool)
+        or not isinstance(fee, (int, float))
+        or fee < 0
+    ):
+        return False, "Doctor fee must be a non-negative number."
+
+    if not isinstance(available, bool):
+        return False, "Doctor availability must be True or False."
+
+    return True, "Doctor data is valid."
+
+
+def validate_appointment(appointment, patients, doctors, test_prices):
+    """Validate an appointment without changing any clinic data."""
+    if not isinstance(appointment, dict):
+        return False, "Appointment must be a dictionary."
+
+    appointment_id = appointment.get("appointment_id")
+
+    if not isinstance(appointment_id, str) or not appointment_id.strip():
+        return False, "Appointment ID must be a non-empty string."
+
+    patient_id = appointment.get("patient_id")
+    result = validate_patient(patient_id, patients)
+
+    if not result[0]:
+        return result
+
+    result = validate_patient_data(patients[patient_id])
+
+    if not result[0]:
+        return False, f"Invalid data for patient {patient_id}: {result[1]}"
+
+    doctor_id = appointment.get("doctor_id")
+    result = validate_doctor_availability(doctor_id, doctors)
+
+    if not result[0]:
+        return result
+
+    result = validate_doctor_data(doctors[doctor_id])
+
+    if not result[0]:
+        return False, f"Invalid data for doctor {doctor_id}: {result[1]}"
+
+    result = validate_appointment_status(appointment.get("status"))
+
+    if not result[0]:
+        return result
+
+    result = validate_tests(appointment.get("tests"), test_prices)
+
+    if not result[0]:
+        return result
+
+    return True, "Appointment data is valid."
