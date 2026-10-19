@@ -1,5 +1,9 @@
 """In-memory data for the Clinic Management System."""
 
+from billing import calculate_bill
+from config import CLINIC_CONFIG
+
+
 patients = {
     "P001": {
         "name": "Ali Khan",
@@ -85,3 +89,23 @@ test_prices = {
     "X-Ray": 2500,
     "MRI": 8000,
 }
+
+# Seed completed visits with their original prices so reports remain historical.
+for appointment in appointments:
+    if appointment["status"] != "completed":
+        continue
+
+    patient = patients[appointment["patient_id"]]
+    doctor = doctors[appointment["doctor_id"]]
+    result = calculate_bill(
+        doctor["fee"],
+        appointment["tests"],
+        test_prices,
+        patient["age"],
+        insurance=patient["insurance"],
+        senior_discount=True,
+        include_tests=True,
+        config=CLINIC_CONFIG,
+    )
+    appointment["bill"] = result[1]
+    appointment["processed"] = True

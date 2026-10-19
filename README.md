@@ -1,136 +1,98 @@
 # Clinic Management System
 
-## 1. Project Overview
+## 1. Overview
 
-The Clinic Management System is a Python-based application designed
-to manage the core operations of a small clinic.
+A small command-line clinic application demonstrating Python fundamentals
+through patient and doctor records, appointment processing, billing, and
+management reports. All records live in Python dictionaries and lists;
+there is no database, file storage, framework, or third-party dependency.
 
-This project was developed as part of a Real-World Problem-Solving
-Assessment to demonstrate Python programming fundamentals and
-business logic implementation.
+## 2. Features and billing rules
 
-The application uses in-memory data structures and does not require
-a database, external packages, or a web framework.
-
-## 2. Project Objectives
-
-The main objectives are to:
-
-- Manage patient and doctor information.
-- Validate patient and doctor records.
-- Manage clinic appointments.
-- Process and cancel appointments.
-- Calculate consultation and medical test charges.
-- Calculate insurance coverage.
-- Apply senior citizen discounts.
+- Manage patients, doctors, appointments, and medical tests.
+- Validate appointment details and reject invalid or duplicate operations
+  with a reason.
+- Process pending appointments once and cancel pending appointments.
 - Generate clinic, doctor, and patient reports.
-- Handle invalid inputs without unnecessarily crashing the program.
-- Verify business logic through automated tests.
+- Support configurable billing options through `**kwargs`, and total multiple
+  charges with `*args`.
 
-## 3. Features
+The subtotal is the consultation fee plus requested test charges. Insurance
+covers 20% of consultation and 50% of tests. Patients aged 60 or older receive
+a 10% discount on the remaining amount after insurance. The discount and
+coverage rates are held in `config.py`. Seed completed appointments store
+their bills at initialization, so later price changes do not reprice history.
 
-### Patient Management
-- Display registered patients.
-- Validate patient IDs.
-- Access patient information.
+Test names are accepted case-insensitively, and repeated tests are rejected.
+When report values tie, the first item in the source insertion order is
+selected.
 
-### Doctor Management
-- Display registered doctors.
-- Validate doctor IDs.
-- Check doctor availability.
+## 3. Design notes
 
-### Appointment Management
-- Display appointments.
-- Add pending appointments.
-- Process pending appointments.
-- Cancel eligible appointments.
-- Prevent duplicate appointment processing.
+- Business operations return `(success, result_or_reason)` rather than
+  displaying output; the command-line interface handles presentation.
+- `calculate_total(*charges)` returns the sum, or `(False, reason)` for invalid
+  charges. `calculate_bill(..., **options)` supports `insurance`,
+  `senior_discount`, `include_tests`, and `config`.
+- The senior-discount calculator is a closure: it captures the age threshold
+  and discount rate from its enclosing configuration scope. The billing
+  function uses its local `config` binding, falling back to the imported
+  module-level `CLINIC_CONFIG`; it does not mutate global configuration. This
+  illustrates LEGB lookup (Local, Enclosing, Global, Built-in).
+- Reports return dictionaries, while `print_clinic_dashboard` and the CLI
+  format and print those results.
 
-### Medical Tests
-The application supports the medical tests defined in its data:
+## 4. Sample dashboard
 
-- ECG
-- Blood Test
-- X-Ray
-- MRI
+```text
+================================================
+              CLINIC DASHBOARD
+================================================
+Total Patients: 4
+Total Doctors: 3
+Total Appointments: 4
+Completed: 3
+Cancelled: 1
+Pending: 0
+Total Consultation Revenue: $12,000.00
+Total Test Revenue: $4,000.00
+Total Insurance Coverage: $3,250.00
+Total Senior Citizen Discount: $650.00
+Total Patient Revenue: $13,100.00
+Most Requested Specialization: Cardiology
+Highest Spending Patient: Usman Ali
+Most Requested Doctor: Dr. Hassan
+Patient with Most Appointments: Ali Khan
+Patients without Completed Appointments: P003
+Insured Patients: P001, P003
+Senior Citizen Patients: P004
+================================================
+```
 
-Medical test prices are configured in `data.py`.
+## 5. Tests
 
-### Billing and Insurance
-- Calculate consultation charges.
-- Calculate medical test charges.
-- Calculate total charges.
-- Calculate insurance coverage.
-- Apply senior citizen discounts.
-- Display the final patient payable amount.### Billing Rules
-
-The system calculates the final patient bill using the following rules:
-
-1. Subtotal = Consultation Fee + Medical Test Charges.
-2. Insurance covers 20% of the consultation fee for insured patients.
-3. Insurance covers 50% of medical test charges for insured patients.
-4. Patients aged 60 or above receive a 10% senior citizen discount on the amount remaining after insurance coverage.
-5. The final patient bill is calculated after deducting insurance coverage and any applicable senior citizen discount.
-6. Patients without insurance receive no insurance coverage.
-
-Insurance coverage and senior citizen discounts are displayed separately in the clinic dashboard.
-## 6. Testing
-
-The project includes a custom automated test suite in `test_clinic.py`.
-
-The tests verify important business rules, including:
-
-- Patient and doctor validation.
-- Invalid patient ages.
-- Medical test validation.
-- Insurance calculations.
-- Senior citizen discounts.
-- Appointment processing and cancellation.
-- Duplicate appointment prevention.
-- Doctor availability.
-- Invalid appointment IDs.
-
-### Run Tests
-
-Execute the following command from the project directory:
+Run the dependency-free test suite from the project directory:
 
 ```bash
 python3 test_clinic.py
-### Reports
-The application generates:
+```
 
-- Clinic dashboard.
-- Doctor performance reports.
-- Patient activity and billing reports.
+The tests cover billing and discount calculations, validation, processing and
+cancellation, duplicate and unavailable records, case-insensitive tests,
+reports, and incomplete dashboard data. `test_clinic.py` also exposes
+`test_*` functions that can be collected by pytest if it is available.
 
-## 4. Technology and Concepts
-
-- Python 3
-- Variables and data types
-- Conditional statements
-- Loops
-- Lists, tuples, sets, and dictionaries
-- Functions
-- `*args` and `**kwargs`
-- Lambda expressions
-- List comprehensions
-- Input validation
-- Exception handling
-- Modular programming
-- Automated testing
-
-No external Python packages are required.
-
-## 5. Project Structure
+## 6. Project structure
 
 ```text
 clinic-management-system/
-├── main.py
-├── data.py
-├── config.py
-├── validation.py
-├── billing.py
 ├── appointments.py
+├── billing.py
+├── config.py
+├── data.py
+├── main.py
 ├── reports.py
 ├── test_clinic.py
+├── validation.py
 └── README.md
+```

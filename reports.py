@@ -11,10 +11,20 @@ def _get_bill(appointment, patients, doctors, test_prices, config=None):
     if appointment.get("status") != "completed":
         return None
 
+    saved_bill = appointment.get("bill")
+
+    if appointment.get("processed") is True and isinstance(saved_bill, dict):
+        return saved_bill
+
     patient_id = appointment.get("patient_id")
     doctor_id = appointment.get("doctor_id")
 
-    if patient_id not in patients or doctor_id not in doctors:
+    if (
+        not isinstance(patient_id, str)
+        or not isinstance(doctor_id, str)
+        or patient_id not in patients
+        or doctor_id not in doctors
+    ):
         return None
 
     patient = patients[patient_id]
@@ -42,12 +52,6 @@ def _get_bill(appointment, patients, doctors, test_prices, config=None):
 
     if not result[0]:
         return None
-
-    # Use the saved bill for an appointment already processed.
-    saved_bill = appointment.get("bill")
-
-    if appointment.get("processed") is True and isinstance(saved_bill, dict):
-        return saved_bill
 
     return result[1]
 
@@ -242,13 +246,7 @@ def generate_clinic_report(
         bill["final_bill"] for _, bill in valid_bills
     )
 
-    patient_revenue = sum(
-        bill["final_bill"] for _, bill in valid_bills
-    )
-
-    print("Calculated Patient Revenue:", patient_revenue)
-    print("--- END DEBUG ---\n")
-    # Lambda sorts and identifies the most-requested doctor.
+    # Equal counts retain the first entry in source insertion order.
     most_requested_doctor = max(
         doctor_report.items(),
         key=lambda item: item[1]["appointments"],
@@ -258,12 +256,19 @@ def generate_clinic_report(
     specialization_counts = {}
 
     for appointment in records:
-        doctor = doctors.get(appointment.get("doctor_id"), {})
+        doctor_id = appointment.get("doctor_id")
+
+        if not isinstance(doctor_id, str):
+            continue
+
+        doctor = doctors.get(doctor_id, {})
 
         if not isinstance(doctor, dict):
             continue
 
         specialization = doctor.get("specialization", "Unknown")
+        if not isinstance(specialization, str) or not specialization.strip():
+            specialization = "Unknown"
 
         specialization_counts[specialization] = (
             specialization_counts.get(specialization, 0) + 1
@@ -369,7 +374,7 @@ def print_clinic_dashboard(report, currency="$"):
     )
     print(
         f"Total Senior Citizen Discount: "
-        f"{currency}{report['total_senior_discount']:,.2f}"
+        f"{currency}{report.get('total_senior_discount', 0):,.2f}"
     )
 
     print(
@@ -389,6 +394,31 @@ def print_clinic_dashboard(report, currency="$"):
     print(
         "Highest Spending Patient: "
         f"{highest[1]['patient_name'] if highest else 'N/A'}"
+    )
+
+    most_requested_doctor = report.get("most_requested_doctor")
+    print(
+        "Most Requested Doctor: "
+        f"{most_requested_doctor[1]['doctor_name'] if most_requested_doctor else 'N/A'}"
+    )
+
+    most_appointments = report.get("patient_with_most_appointments")
+    print(
+        "Patient with Most Appointments: "
+        f"{most_appointments[1]['patient_name'] if most_appointments else 'N/A'}"
+    )
+
+    print(
+        "Patients without Completed Appointments: "
+        f"{', '.join(report.get('patients_without_completed_appointment', [])) or 'None'}"
+    )
+    print(
+        "Insured Patients: "
+        f"{', '.join(report.get('insured_patients', [])) or 'None'}"
+    )
+    print(
+        "Senior Citizen Patients: "
+        f"{', '.join(report.get('senior_citizen_patients', [])) or 'None'}"
     )
 
     print("=" * 48)

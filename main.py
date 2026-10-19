@@ -2,7 +2,7 @@
 
 from data import patients, doctors, appointments, test_prices
 from config import CLINIC_CONFIG
-from appointments import process_appointment, cancel_appointment
+from appointments import find_appointment, process_appointment, cancel_appointment
 from billing import calculate_bill
 from reports import (
     generate_doctor_report,
@@ -10,6 +10,7 @@ from reports import (
     generate_clinic_report,
     print_clinic_dashboard,
 )
+from validation import validate_appointment
 
 
 def print_menu():
@@ -266,11 +267,7 @@ def handle_add_appointment():
         print("REJECTED | Appointment ID cannot be empty.")
         return
 
-    if any(
-        isinstance(item, dict)
-        and item.get("appointment_id") == appointment_id
-        for item in appointments
-    ):
+    if find_appointment(appointment_id, appointments) is not None:
         print(f"REJECTED | Appointment {appointment_id} already exists.")
         return
 
@@ -305,8 +302,6 @@ def handle_add_appointment():
     }
 
     # Validate the complete appointment before changing the records.
-    from validation import validate_appointment
-
     result = validate_appointment(
         new_appointment, patients, doctors, test_prices
     )
@@ -371,4 +366,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (EOFError, KeyboardInterrupt):
+        print("\nClinic Management System closed.")

@@ -1,19 +1,16 @@
 """Billing calculations for the Clinic Management System."""
 
-from config import CLINIC_CONFIG
+from config import CLINIC_CONFIG, create_senior_discount_calculator
+from validation import is_non_negative_number, validate_tests
 
 
 def calculate_total(*charges):
-    """Return the sum of multiple non-negative numeric charges."""
+    """Sum non-negative numeric charges, or return a failure and reason."""
     total = 0
 
     for charge in charges:
-        if (
-            isinstance(charge, bool)
-            or not isinstance(charge, (int, float))
-            or charge < 0
-        ):
-            raise ValueError("Every charge must be a non-negative number.")
+        if not is_non_negative_number(charge):
+            return False, "Every charge must be a non-negative number."
 
         total += charge
 
@@ -22,35 +19,17 @@ def calculate_total(*charges):
 
 def calculate_test_charges(tests, test_prices):
     """Calculate medical test charges after validating the test list."""
-    if not isinstance(tests, list):
-        return False, "Tests must be provided as a list."
+    validation_result = validate_tests(tests, test_prices)
 
-    total = 0
-    seen_tests = set()
+    if not validation_result[0]:
+        return False, validation_result[1]
 
-    for test in tests:
-        if not isinstance(test, str) or not test.strip():
-            return False, "Each test name must be a non-empty string."
-
-        if test not in test_prices:
-            return False, f"Medical test '{test}' does not exist."
-
-        if test in seen_tests:
-            return False, f"Duplicate medical test '{test}' is not allowed."
-
-        price = test_prices[test]
-
-        if (
-            isinstance(price, bool)
-            or not isinstance(price, (int, float))
-            or price < 0
-        ):
-            return False, f"Invalid price for medical test '{test}'."
-
-        total += price
-        seen_tests.add(test)
-
-    return True, total
+    prices = {
+        name.casefold(): price
+        for name, price in test_prices.items()
+        if isinstance(name, str)
+    }
+    return True, sum(prices[test.casefold()] for test in tests)
 
 
 def calculate_insurance_coverage(
@@ -67,11 +46,7 @@ def calculate_insurance_coverage(
         ("Consultation fee", consultation_fee),
         ("Test charges", test_charges),
     ):
-        if (
-            isinstance(amount, bool)
-            or not isinstance(amount, (int, float))
-            or amount < 0
-        ):
+        if not is_non_negative_number(amount):
             return False, f"{name} must be a non-negative number."
 
     if not isinstance(insurance, bool):
@@ -87,11 +62,7 @@ def calculate_insurance_coverage(
         ("Consultation insurance rate", consultation_rate),
         ("Test insurance rate", test_rate),
     ):
-        if (
-            isinstance(rate, bool)
-            or not isinstance(rate, (int, float))
-            or not 0 <= rate <= 1
-        ):
+        if not is_non_negative_number(rate) or rate > 1:
             return False, f"{name} must be between 0 and 1."
 
     if not insurance:
@@ -145,11 +116,7 @@ def calculate_bill(
             f"Unknown billing option(s): {', '.join(sorted(unknown_options))}."
         )
 
-    if (
-        isinstance(consultation_fee, bool)
-        or not isinstance(consultation_fee, (int, float))
-        or consultation_fee < 0
-    ):
+    if not is_non_negative_number(consultation_fee):
         return False, "Consultation fee must be a non-negative number."
 
     if isinstance(age, bool) or not isinstance(age, int) or age < 0:
@@ -201,11 +168,7 @@ def calculate_bill(
 
     discount_rate = config["senior_discount_rate"]
 
-    if (
-        isinstance(discount_rate, bool)
-        or not isinstance(discount_rate, (int, float))
-        or not 0 <= discount_rate <= 1
-    ):
+    if not is_non_negative_number(discount_rate) or discount_rate > 1:
         return False, "Senior discount rate must be between 0 and 1."
 
     if tests is None:
@@ -227,7 +190,12 @@ def calculate_bill(
     else:
         test_charges = 0
 
-    subtotal = calculate_total(consultation_fee, test_charges)
+    subtotal_result = calculate_total(consultation_fee, test_charges)
+
+    if isinstance(subtotal_result, tuple):
+        return subtotal_result
+
+    subtotal = subtotal_result
 
     insurance_result = calculate_insurance_coverage(
         consultation_fee,
@@ -242,10 +210,10 @@ def calculate_bill(
     coverage = insurance_result[1]
     amount_after_insurance = subtotal - coverage["total_coverage"]
 
-    is_senior = age >= config["senior_age"]
+    discount_calculator = create_senior_discount_calculator(config)
 
-    if senior_discount and is_senior:
-        discount_amount = amount_after_insurance * discount_rate
+    if senior_discount:
+        discount_amount = discount_calculator(amount_after_insurance, age)
     else:
         discount_amount = 0
 

@@ -9,7 +9,11 @@ from validation import (
 
 def find_appointment(appointment_id, appointments):
     """Find an appointment by ID without modifying the data."""
-    if not isinstance(appointment_id, str) or not appointment_id.strip():
+    if (
+        not isinstance(appointment_id, str)
+        or not appointment_id.strip()
+        or not isinstance(appointments, list)
+    ):
         return None
 
     for appointment in appointments:
@@ -34,8 +38,7 @@ def process_appointment(
     Validate and process an appointment.
 
     A successful appointment is billed only once.
-    Existing completed appointments can be billed once if they
-    have not previously been processed by this function.
+    Only pending appointments can be processed.
     """
     if not isinstance(appointments, list):
         return False, "Appointments must be provided as a list."
@@ -43,22 +46,18 @@ def process_appointment(
     if not isinstance(appointment_id, str) or not appointment_id.strip():
         return False, "Appointment ID must be a non-empty string."
 
-    matches = [
-        appointment
-        for appointment in appointments
-        if (
-            isinstance(appointment, dict)
-            and appointment.get("appointment_id") == appointment_id
-        )
-    ]
+    appointment = find_appointment(appointment_id, appointments)
 
-    if not matches:
+    if appointment is None:
         return False, f"Appointment {appointment_id} does not exist."
 
-    if len(matches) > 1:
+    if sum(
+        1
+        for item in appointments
+        if isinstance(item, dict)
+        and item.get("appointment_id") == appointment_id
+    ) > 1:
         return False, f"Duplicate appointment ID {appointment_id} exists."
-
-    appointment = matches[0]
 
     if appointment.get("processed") is True:
         return False, f"Appointment {appointment_id} has already been processed."
@@ -68,8 +67,11 @@ def process_appointment(
     if not status_result[0]:
         return False, status_result[1]
 
-    if appointment["status"] == "cancelled":
-        return False, f"Appointment {appointment_id} is cancelled and cannot be processed."
+    if appointment["status"] != "pending":
+        return False, (
+            f"Appointment {appointment_id} is {appointment['status']} "
+            "and cannot be processed."
+        )
 
     validation_result = validate_appointment(
         appointment,
@@ -130,22 +132,18 @@ def cancel_appointment(appointment_id, appointments):
     if not isinstance(appointment_id, str) or not appointment_id.strip():
         return False, "Appointment ID must be a non-empty string."
 
-    matches = [
-        appointment
-        for appointment in appointments
-        if (
-            isinstance(appointment, dict)
-            and appointment.get("appointment_id") == appointment_id
-        )
-    ]
+    appointment = find_appointment(appointment_id, appointments)
 
-    if not matches:
+    if appointment is None:
         return False, f"Appointment {appointment_id} does not exist."
 
-    if len(matches) > 1:
+    if sum(
+        1
+        for item in appointments
+        if isinstance(item, dict)
+        and item.get("appointment_id") == appointment_id
+    ) > 1:
         return False, f"Duplicate appointment ID {appointment_id} exists."
-
-    appointment = matches[0]
 
     status_result = validate_appointment_status(appointment.get("status"))
 

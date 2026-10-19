@@ -3,9 +3,21 @@
 VALID_STATUSES = {"pending", "completed", "cancelled"}
 
 
+def is_non_negative_number(value):
+    """Return whether value is a non-negative int or float, excluding bools."""
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and value >= 0
+    )
+
+
 def validate_patient(patient_id, patients):
     if not isinstance(patient_id, str) or not patient_id.strip():
         return False, "Patient ID must be a non-empty string."
+
+    if not isinstance(patients, dict):
+        return False, "Patients must be provided as a dictionary."
 
     if patient_id not in patients:
         return False, f"Patient {patient_id} does not exist."
@@ -25,6 +37,9 @@ def validate_doctor(doctor_id, doctors):
     """Check whether a doctor exists."""
     if not isinstance(doctor_id, str) or not doctor_id.strip():
         return False, "Doctor ID must be a non-empty string."
+
+    if not isinstance(doctors, dict):
+        return False, "Doctors must be provided as a dictionary."
 
     if doctor_id not in doctors:
         return False, f"Doctor {doctor_id} does not exist."
@@ -64,28 +79,34 @@ def validate_tests(tests, test_prices):
     if not isinstance(tests, list):
         return False, "Tests must be provided as a list."
 
+    if not isinstance(test_prices, dict):
+        return False, "Test prices must be provided as a dictionary."
+
+    normalized_prices = {
+        name.casefold(): price
+        for name, price in test_prices.items()
+        if isinstance(name, str)
+    }
     seen_tests = set()
 
     for test in tests:
         if not isinstance(test, str) or not test.strip():
             return False, "Each test name must be a non-empty string."
 
-        if test not in test_prices:
+        normalized_test = test.casefold()
+
+        if normalized_test not in normalized_prices:
             return False, f"Medical test '{test}' does not exist."
 
-        if test in seen_tests:
+        if normalized_test in seen_tests:
             return False, f"Duplicate medical test '{test}' is not allowed."
 
-        price = test_prices[test]
+        price = normalized_prices[normalized_test]
 
-        if (
-            isinstance(price, bool)
-            or not isinstance(price, (int, float))
-            or price < 0
-        ):
+        if not is_non_negative_number(price):
             return False, f"Invalid price for medical test '{test}'."
 
-        seen_tests.add(test)
+        seen_tests.add(normalized_test)
 
     return True, "All medical tests are valid."
 
@@ -131,11 +152,7 @@ def validate_doctor_data(doctor):
     if not isinstance(specialization, str) or not specialization.strip():
         return False, "Doctor specialization must be a non-empty string."
 
-    if (
-        isinstance(fee, bool)
-        or not isinstance(fee, (int, float))
-        or fee < 0
-    ):
+    if not is_non_negative_number(fee):
         return False, "Doctor fee must be a non-negative number."
 
     if not isinstance(available, bool):
