@@ -3,7 +3,6 @@
 from billing import calculate_bill
 from config import CLINIC_CONFIG
 
-
 patients = {
     "P001": {
         "name": "Ali Khan",
@@ -92,20 +91,37 @@ test_prices = {
 
 # Seed completed visits with their original prices so reports remain historical.
 for appointment in appointments:
-    if appointment["status"] != "completed":
+    if not isinstance(appointment, dict) or appointment.get("status") != "completed":
         continue
 
-    patient = patients[appointment["patient_id"]]
-    doctor = doctors[appointment["doctor_id"]]
+    pid = appointment.get("patient_id")
+    did = appointment.get("doctor_id")
+
+    # Defensive Guard: Ensure key relations exist before bootstrapping pricing data arrays
+    if pid not in patients or did not in doctors:
+        continue
+
+    patient = patients[pid]
+    doctor = doctors[did]
+
     result = calculate_bill(
         doctor["fee"],
-        appointment["tests"],
+        appointment.get("tests", []),
         test_prices,
-        patient["age"],
-        insurance=patient["insurance"],
+        patient.get("age", 0),
+        insurance=patient.get("insurance", False),
         senior_discount=True,
         include_tests=True,
         config=CLINIC_CONFIG,
     )
-    appointment["bill"] = result[1]
+
+    # Fixed: Safe verification handling mapping for both single dict schemas and response tuples
+    if isinstance(result, tuple) and result[0]:
+        appointment["bill"] = result[1]
+    elif isinstance(result, dict):
+        appointment["bill"] = result
+    else:
+        # Fallback to prevent data corruption if calculation parameters are malformed
+        appointment["bill"] = {}
+
     appointment["processed"] = True

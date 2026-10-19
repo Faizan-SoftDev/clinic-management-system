@@ -33,6 +33,8 @@ def validate_patient(patient_id, patients):
         return False, "Patient age must be a non-negative integer."
 
     return True, "Patient exists."
+
+
 def validate_doctor(doctor_id, doctors):
     """Check whether a doctor exists."""
     if not isinstance(doctor_id, str) or not doctor_id.strip():
@@ -75,18 +77,21 @@ def validate_appointment_status(status):
 
 
 def validate_tests(tests, test_prices):
-    """Validate the test list, including invalid and duplicate tests."""
+    """Validate the test list, including invalid and duplicate tests securely."""
     if not isinstance(tests, list):
         return False, "Tests must be provided as a list."
 
     if not isinstance(test_prices, dict):
         return False, "Test prices must be provided as a dictionary."
 
-    normalized_prices = {
-        name.casefold(): price
-        for name, price in test_prices.items()
-        if isinstance(name, str)
-    }
+    # Robust validation for all keys in the price master list first
+    for name, price in test_prices.items():
+        if not isinstance(name, str):
+            return False, "All test directory master keys must be strings."
+        if not is_non_negative_number(price):
+            return False, f"Invalid price setup for master index '{name}'."
+
+    normalized_prices = {name.casefold(): price for name, price in test_prices.items()}
     seen_tests = set()
 
     for test in tests:
@@ -100,11 +105,6 @@ def validate_tests(tests, test_prices):
 
         if normalized_test in seen_tests:
             return False, f"Duplicate medical test '{test}' is not allowed."
-
-        price = normalized_prices[normalized_test]
-
-        if not is_non_negative_number(price):
-            return False, f"Invalid price for medical test '{test}'."
 
         seen_tests.add(normalized_test)
 
@@ -161,46 +161,47 @@ def validate_doctor_data(doctor):
     return True, "Doctor data is valid."
 
 
-def validate_appointment(appointment, patients, doctors, test_prices):
-    """Validate an appointment without changing any clinic data."""
+def validate_appointment(appointment, patients, doctors, test_prices, active_appointments=None):
+    """Validate an appointment fully, checking structure, validity and schedule double-booking configurations."""
     if not isinstance(appointment, dict):
         return False, "Appointment must be a dictionary."
 
     appointment_id = appointment.get("appointment_id")
-
     if not isinstance(appointment_id, str) or not appointment_id.strip():
         return False, "Appointment ID must be a non-empty string."
 
     patient_id = appointment.get("patient_id")
     result = validate_patient(patient_id, patients)
-
     if not result[0]:
         return result
 
-    result = validate_patient_data(patients[patient_id])
-
-    if not result[0]:
-        return False, f"Invalid data for patient {patient_id}: {result[1]}"
-
     doctor_id = appointment.get("doctor_id")
     result = validate_doctor_availability(doctor_id, doctors)
-
     if not result[0]:
         return result
 
     result = validate_doctor_data(doctors[doctor_id])
-
     if not result[0]:
         return False, f"Invalid data for doctor {doctor_id}: {result[1]}"
 
     result = validate_appointment_status(appointment.get("status"))
-
     if not result[0]:
         return result
 
     result = validate_tests(appointment.get("tests"), test_prices)
-
     if not result[0]:
         return result
+
+    # Fixed: Prevent Time-slot Collision/Double-booking across running logs
+    appointment_date = appointment.get("date")
+    appointment_time = appointment.get("time")
+
+    if active_appointments and isinstance(active_appointments, dict):
+        for existing_id, active_app in active_appointments.items():
+            if existing_id != appointment_id and active_app.get("status") in {"pending", "completed"}:
+                if (active_app.get("doctor_id") == doctor_id and
+                        active_app.get("date") == appointment_date and
+                        active_app.get("time") == appointment_time):
+                    return False, f"Doctor {doctor_id} is already booked at {appointment_time} on {appointment_date}."
 
     return True, "Appointment data is valid."

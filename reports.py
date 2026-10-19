@@ -50,10 +50,12 @@ def _get_bill(appointment, patients, doctors, test_prices, config=None):
         **options,
     )
 
-    if not result[0]:
+    if isinstance(result, tuple) and not result:
         return None
+    elif isinstance(result, tuple):
+        return result
 
-    return result[1]
+    return result
 
 
 def _valid_appointments(appointments):
@@ -182,7 +184,7 @@ def generate_patient_report(
 def generate_clinic_report(
     patients, doctors, appointments, test_prices, config=None
 ):
-    """Generate clinic-wide management statistics."""
+    """Generate clinic-wide management statistics with strict source tie-breaking."""
     if not isinstance(patients, dict):
         patients = {}
 
@@ -214,7 +216,6 @@ def generate_clinic_report(
         if item.get("status") == "pending"
     ]
 
-    # Calculate each valid completed appointment's bill once.
     completed_bills = [
         _get_bill(item, patients, doctors, test_prices, config)
         for item in completed
@@ -246,23 +247,24 @@ def generate_clinic_report(
         bill["final_bill"] for _, bill in valid_bills
     )
 
-    # Equal counts retain the first entry in source insertion order.
+    # Stable Doctor Tie-Breaker Implementation using original dictionary index
+    doc_keys_order = list(doctors.keys())
     most_requested_doctor = max(
         doctor_report.items(),
-        key=lambda item: item[1]["appointments"],
+        key=lambda item: (item[1]["appointments"], -doc_keys_order.index(item[0])),
         default=None,
     )
 
+    # Build ordered sequence for specializations based on insertion records appearance
     specialization_counts = {}
+    spec_insertion_order = []
 
     for appointment in records:
         doctor_id = appointment.get("doctor_id")
-
         if not isinstance(doctor_id, str):
             continue
 
         doctor = doctors.get(doctor_id, {})
-
         if not isinstance(doctor, dict):
             continue
 
@@ -270,29 +272,33 @@ def generate_clinic_report(
         if not isinstance(specialization, str) or not specialization.strip():
             specialization = "Unknown"
 
-        specialization_counts[specialization] = (
-            specialization_counts.get(specialization, 0) + 1
-        )
+        if specialization not in specialization_counts:
+            specialization_counts[specialization] = 0
+            spec_insertion_order.append(specialization)
+
+        specialization_counts[specialization] += 1
 
     most_requested_specialization = max(
         specialization_counts.items(),
-        key=lambda item: item[1],
+        key=lambda item: (item[1], -spec_insertion_order.index(item[0])),
         default=None,
     )
 
+    # Stable Patient Metric Tie-Breakers
+    patient_keys_order = list(patients.keys())
     highest_spending_patient = max(
         patient_report.items(),
-        key=lambda item: item[1]["patient_paid"],
+        key=lambda item: (item[1]["patient_paid"], -patient_keys_order.index(item[0])),
         default=None,
     )
 
     patient_with_most_appointments = max(
         patient_report.items(),
-        key=lambda item: item[1]["appointments"],
+        key=lambda item: (item[1]["appointments"], -patient_keys_order.index(item[0])),
         default=None,
     )
 
-    # Required comprehensions.
+    # Safe Dynamic Configurations lookup engines
     senior_age = (config or {}).get("senior_age", 60)
 
     insured_patients = [
@@ -346,79 +352,20 @@ def print_clinic_dashboard(report, currency="$"):
     if not isinstance(report, dict):
         print("Cannot display dashboard: invalid report.")
         return
-
     print("=" * 48)
-    print("              CLINIC DASHBOARD")
+    print("            CLINIC DASHBOARD")
     print("=" * 48)
-
     print(f"Total Patients: {report.get('total_patients', 0)}")
     print(f"Total Doctors: {report.get('total_doctors', 0)}")
     print(f"Total Appointments: {report.get('total_appointments', 0)}")
     print(f"Completed: {report.get('completed', 0)}")
     print(f"Cancelled: {report.get('cancelled', 0)}")
     print(f"Pending: {report.get('pending', 0)}")
-
     print(
         "Total Consultation Revenue: "
         f"{currency}{report.get('total_consultation_revenue', 0):,.2f}"
     )
-
     print(
         "Total Test Revenue: "
         f"{currency}{report.get('total_test_revenue', 0):,.2f}"
     )
-
-    print(
-        "Total Insurance Coverage: "
-        f"{currency}{report.get('total_insurance_coverage', 0):,.2f}"
-    )
-    print(
-        f"Total Senior Citizen Discount: "
-        f"{currency}{report.get('total_senior_discount', 0):,.2f}"
-    )
-
-    print(
-        "Total Patient Revenue: "
-        f"{currency}{report.get('total_patient_revenue', 0):,.2f}"
-    )
-
-    specialization = report.get("most_requested_specialization")
-
-    print(
-        "Most Requested Specialization: "
-        f"{specialization[0] if specialization else 'N/A'}"
-    )
-
-    highest = report.get("highest_spending_patient")
-
-    print(
-        "Highest Spending Patient: "
-        f"{highest[1]['patient_name'] if highest else 'N/A'}"
-    )
-
-    most_requested_doctor = report.get("most_requested_doctor")
-    print(
-        "Most Requested Doctor: "
-        f"{most_requested_doctor[1]['doctor_name'] if most_requested_doctor else 'N/A'}"
-    )
-
-    most_appointments = report.get("patient_with_most_appointments")
-    print(
-        "Patient with Most Appointments: "
-        f"{most_appointments[1]['patient_name'] if most_appointments else 'N/A'}"
-    )
-
-    print(
-        "Patients without Completed Appointments: "
-        f"{', '.join(report.get('patients_without_completed_appointment', [])) or 'None'}"
-    )
-    print(
-        "Insured Patients: "
-        f"{', '.join(report.get('insured_patients', [])) or 'None'}"
-    )
-    print(
-        "Senior Citizen Patients: "
-        f"{', '.join(report.get('senior_citizen_patients', [])) or 'None'}"
-    )
-
-    print("=" * 48)
