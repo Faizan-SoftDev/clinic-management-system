@@ -365,8 +365,13 @@ def main():
             print("Invalid option. Please select a number from 0 to 10.")
 
 
-if __name__ == "__main__":
+def run():
+    """Start the application and handle normal terminal interruptions."""
     try:
         main()
     except (EOFError, KeyboardInterrupt):
         print("\nClinic Management System closed.")
+
+
+if __name__ == "__main__":
+    run()

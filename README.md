@@ -71,6 +71,17 @@ Senior Citizen Patients: P004
 
 ## 5. Tests
 
+Start the application by running `app.py` from PyCharm, or from the project
+directory with:
+
+```bash
+python3 app.py
+```
+
+In PyCharm, choose the shared **Clinic Management System** run configuration.
+Running `data.py` directly only loads the starter records; it does not start
+the interactive menu.
+
 Run the dependency-free test suite from the project directory:
 
 ```bash
@@ -90,6 +101,7 @@ clinic-management-system/
 ├── billing.py
 ├── config.py
 ├── data.py
+├── __main__.py
 ├── main.py
 ├── reports.py
 ├── test_clinic.py
