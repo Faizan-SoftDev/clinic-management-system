@@ -97,7 +97,6 @@ for appointment in appointments:
     pid = appointment.get("patient_id")
     did = appointment.get("doctor_id")
 
-    # Defensive Guard: Ensure key relations exist before bootstrapping pricing data arrays
     if pid not in patients or did not in doctors:
         continue
 
@@ -115,13 +114,9 @@ for appointment in appointments:
         config=CLINIC_CONFIG,
     )
 
-    # Fixed: Safe verification handling mapping for both single dict schemas and response tuples
     if isinstance(result, tuple) and result[0]:
         appointment["bill"] = result[1]
-    elif isinstance(result, dict):
-        appointment["bill"] = result
+        appointment["processed"] = True
     else:
-        # Fallback to prevent data corruption if calculation parameters are malformed
-        appointment["bill"] = {}
-
-    appointment["processed"] = True
+        # Do not save empty corrupt dicts; leave processed unset on failure
+        pass

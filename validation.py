@@ -84,7 +84,6 @@ def validate_tests(tests, test_prices):
     if not isinstance(test_prices, dict):
         return False, "Test prices must be provided as a dictionary."
 
-    # Robust validation for all keys in the price master list first
     for name, price in test_prices.items():
         if not isinstance(name, str):
             return False, "All test directory master keys must be strings."
@@ -161,8 +160,8 @@ def validate_doctor_data(doctor):
     return True, "Doctor data is valid."
 
 
-def validate_appointment(appointment, patients, doctors, test_prices, active_appointments=None):
-    """Validate an appointment fully, checking structure, validity and schedule double-booking configurations."""
+def validate_appointment(appointment, patients, doctors, test_prices):
+    """Validate an appointment fully."""
     if not isinstance(appointment, dict):
         return False, "Appointment must be a dictionary."
 
@@ -191,17 +190,5 @@ def validate_appointment(appointment, patients, doctors, test_prices, active_app
     result = validate_tests(appointment.get("tests"), test_prices)
     if not result[0]:
         return result
-
-    # Fixed: Prevent Time-slot Collision/Double-booking across running logs
-    appointment_date = appointment.get("date")
-    appointment_time = appointment.get("time")
-
-    if active_appointments and isinstance(active_appointments, dict):
-        for existing_id, active_app in active_appointments.items():
-            if existing_id != appointment_id and active_app.get("status") in {"pending", "completed"}:
-                if (active_app.get("doctor_id") == doctor_id and
-                        active_app.get("date") == appointment_date and
-                        active_app.get("time") == appointment_time):
-                    return False, f"Doctor {doctor_id} is already booked at {appointment_time} on {appointment_date}."
 
     return True, "Appointment data is valid."

@@ -1,371 +1,236 @@
-"""Management reports for the Clinic Management System."""
+"""Reporting and analytics for the Clinic Management System using lambdas and comprehensions."""
 
-from billing import calculate_bill
-
-
-def _get_bill(appointment, patients, doctors, test_prices, config=None):
-    """Calculate or retrieve a valid bill for a completed appointment."""
-    if not isinstance(appointment, dict):
-        return None
-
-    if appointment.get("status") != "completed":
-        return None
-
-    saved_bill = appointment.get("bill")
-
-    if appointment.get("processed") is True and isinstance(saved_bill, dict):
-        return saved_bill
-
-    patient_id = appointment.get("patient_id")
-    doctor_id = appointment.get("doctor_id")
-
-    if (
-        not isinstance(patient_id, str)
-        or not isinstance(doctor_id, str)
-        or patient_id not in patients
-        or doctor_id not in doctors
-    ):
-        return None
-
-    patient = patients[patient_id]
-    doctor = doctors[doctor_id]
-
-    if not isinstance(patient, dict) or not isinstance(doctor, dict):
-        return None
-
-    options = {
-        "insurance": patient.get("insurance"),
-        "senior_discount": True,
-        "include_tests": True,
-    }
-
-    if config is not None:
-        options["config"] = config
-
-    result = calculate_bill(
-        doctor.get("fee"),
-        appointment.get("tests"),
-        test_prices,
-        patient.get("age"),
-        **options,
-    )
-
-    if isinstance(result, tuple) and not result:
-        return None
-    elif isinstance(result, tuple):
-        return result
-
-    return result
-
-
-def _valid_appointments(appointments):
-    """Return appointment records with valid, non-empty IDs."""
-    if not isinstance(appointments, list):
-        return []
-
-    return [
-        appointment
-        for appointment in appointments
-        if isinstance(appointment, dict)
-        and isinstance(appointment.get("appointment_id"), str)
-        and appointment["appointment_id"].strip()
-    ]
+from typing import Dict, Any, List
 
 
 def generate_doctor_report(
-    patients, doctors, appointments, test_prices, config=None
-):
-    """Generate statistics for every doctor."""
-    if not isinstance(patients, dict) or not isinstance(doctors, dict):
-        return {}
+    patients: Dict[str, Any],
+    doctors: Dict[str, Any],
+    appointments: List[Dict[str, Any]],
+    test_prices: Dict[str, float],
+    config: Dict[str, Any],
+) -> str:
+    """Generate analytical performance report for all doctors."""
+    if not isinstance(doctors, dict) or not doctors:
+        return "No doctor records available."
 
-    records = _valid_appointments(appointments)
-    report = {}
+    report_lines = ["\n--- DOCTOR PERFORMANCE METRICS ---"]
 
-    for doctor_id, doctor in doctors.items():
-        if not isinstance(doctor, dict):
-            continue
+    doc_stats = {}
+    for did, doc_info in doctors.items():
+        doc_apps = [a for a in appointments if isinstance(a, dict) and a.get("doctor_id") == did]
+        completed_apps = [a for a in doc_apps if a.get("status") == "completed"]
+        cancelled_apps = [a for a in doc_apps if a.get("status") == "cancelled"]
 
-        doctor_appointments = [
-            item for item in records
-            if item.get("doctor_id") == doctor_id
-        ]
+        total_revenue = sum(
+            a.get("bill", {}).get("final_bill", 0.0)
+            for a in completed_apps
+            if isinstance(a.get("bill"), dict)
+        )
+        avg_bill = (total_revenue / len(completed_apps)) if completed_apps else 0.0
 
-        completed = [
-            item for item in doctor_appointments
-            if item.get("status") == "completed"
-        ]
-
-        cancelled = [
-            item for item in doctor_appointments
-            if item.get("status") == "cancelled"
-        ]
-
-        bills = [
-            _get_bill(item, patients, doctors, test_prices, config)
-            for item in completed
-        ]
-
-        bills = [bill for bill in bills if bill is not None]
-
-        revenue = sum(bill["final_bill"] for bill in bills)
-        average_bill = revenue / len(bills) if bills else 0
-
-        report[doctor_id] = {
-            "doctor_name": doctor.get("name", "Unknown"),
-            "specialization": doctor.get("specialization", "Unknown"),
-            "appointments": len(doctor_appointments),
-            "completed_appointments": len(completed),
-            "cancelled_appointments": len(cancelled),
-            "total_revenue": revenue,
-            "average_bill": average_bill,
+        doc_stats[did] = {
+            "name": doc_info.get("name", "Unknown"),
+            "specialization": doc_info.get("specialization", "General"),
+            "total_appointments": len(doc_apps),
+            "completed": len(completed_apps),
+            "cancelled": len(cancelled_apps),
+            "revenue": total_revenue,
+            "avg_bill": avg_bill,
         }
 
-    return report
+    currency = config.get("currency", "$")
+
+    for did, stats in doc_stats.items():
+        report_lines.append(
+            f"Doctor ID: {did} | Name: {stats['name']} ({stats['specialization']}) | "
+            f"Total Apps: {stats['total_appointments']} | Completed: {stats['completed']} | "
+            f"Cancelled: {stats['cancelled']} | Revenue: {currency}{stats['revenue']:,.2f} | "
+            f"Avg Bill: {currency}{stats['avg_bill']:,.2f}"
+        )
+
+    sorted_doctors = sorted(
+        doc_stats.items(),
+        key=lambda item: item[1]["revenue"],
+        reverse=True,
+    )
+
+    if sorted_doctors:
+        top_doc = sorted_doctors[0]
+        report_lines.append(f"\nTop Revenue Doctor: {top_doc[1]['name']} ({currency}{top_doc[1]['revenue']:,.2f})")
+
+    return "\n".join(report_lines)
 
 
 def generate_patient_report(
-    patients, doctors, appointments, test_prices, config=None
-):
-    """Generate appointment and billing statistics for every patient."""
-    if not isinstance(patients, dict):
-        return {}
+    patients: Dict[str, Any],
+    doctors: Dict[str, Any],
+    appointments: List[Dict[str, Any]],
+    test_prices: Dict[str, float],
+    config: Dict[str, Any],
+) -> str:
+    """Generate patient history metrics and analytics."""
+    if not isinstance(patients, dict) or not patients:
+        return "No patient records available."
 
-    records = _valid_appointments(appointments)
-    report = {}
+    report_lines = ["\n--- PATIENT HISTORY METRICS ---"]
+    currency = config.get("currency", "$")
 
-    for patient_id, patient in patients.items():
-        if not isinstance(patient, dict):
-            continue
+    patient_stats = {}
+    for pid, p_info in patients.items():
+        p_apps = [a for a in appointments if isinstance(a, dict) and a.get("patient_id") == pid]
+        completed = [a for a in p_apps if a.get("status") == "completed"]
+        cancelled = [a for a in p_apps if a.get("status") == "cancelled"]
 
-        patient_appointments = [
-            item for item in records
-            if item.get("patient_id") == patient_id
-        ]
+        total_spent = sum(
+            a.get("bill", {}).get("final_bill", 0.0)
+            for a in completed
+            if isinstance(a.get("bill"), dict)
+        )
+        total_insurance = sum(
+            a.get("bill", {}).get("insurance_coverage", 0.0)
+            for a in completed
+            if isinstance(a.get("bill"), dict)
+        )
 
-        completed = [
-            item for item in patient_appointments
-            if item.get("status") == "completed"
-        ]
-
-        cancelled = [
-            item for item in patient_appointments
-            if item.get("status") == "cancelled"
-        ]
-
-        bills = [
-            _get_bill(item, patients, doctors, test_prices, config)
-            for item in completed
-        ]
-
-        bills = [bill for bill in bills if bill is not None]
-
-        report[patient_id] = {
-            "patient_name": patient.get("name", "Unknown"),
-            "age": patient.get("age"),
-            "insurance": patient.get("insurance") is True,
-            "appointments": len(patient_appointments),
-            "completed_appointments": len(completed),
-            "cancelled_appointments": len(cancelled),
-            "total_medical_charges": sum(
-                bill["subtotal"] for bill in bills
-            ),
-            "insurance_coverage": sum(
-                bill["insurance_coverage"] for bill in bills
-            ),
-            "patient_paid": sum(
-                bill["final_bill"] for bill in bills
-            ),
+        patient_stats[pid] = {
+            "name": p_info.get("name", "Unknown"),
+            "total_apps": len(p_apps),
+            "completed": len(completed),
+            "cancelled": len(cancelled),
+            "total_spent": total_spent,
+            "insurance_coverage": total_insurance,
+            "insurance_enabled": p_info.get("insurance", False),
+            "age": p_info.get("age", 0),
         }
 
-    return report
+    for pid, stats in patient_stats.items():
+        report_lines.append(
+            f"Patient ID: {pid} | Name: {stats['name']} | Apps: {stats['total_apps']} "
+            f"(Done: {stats['completed']}, Cancelled: {stats['cancelled']}) | "
+            f"Spent: {currency}{stats['total_spent']:,.2f} | Covered: {currency}{stats['insurance_coverage']:,.2f}"
+        )
+
+    insured_patients = [p["name"] for p in patients.values() if p.get("insurance") is True]
+    senior_patients = [p["name"] for p in patients.values() if p.get("age", 0) >= config.get("senior_age", 60)]
+    no_completed_apps = [
+        stats["name"] for pid, stats in patient_stats.items() if stats["completed"] == 0
+    ]
+
+    report_lines.append(f"\nInsured Patients: {', '.join(insured_patients) or 'None'}")
+    report_lines.append(f"Senior Citizens: {', '.join(senior_patients) or 'None'}")
+    report_lines.append(f"Patients with No Completed Appointments: {', '.join(no_completed_apps) or 'None'}")
+
+    highest_spender = max(
+        patient_stats.items(),
+        key=lambda item: item[1]["total_spent"],
+        default=(None, {"name": "None", "total_spent": 0}),
+    )
+    report_lines.append(f"Highest Spending Patient: {highest_spender[1]['name']} ({currency}{highest_spender[1]['total_spent']:,.2f})")
+
+    return "\n".join(report_lines)
 
 
 def generate_clinic_report(
-    patients, doctors, appointments, test_prices, config=None
-):
-    """Generate clinic-wide management statistics with strict source tie-breaking."""
-    if not isinstance(patients, dict):
-        patients = {}
+    patients: Dict[str, Any],
+    doctors: Dict[str, Any],
+    appointments: List[Dict[str, Any]],
+    test_prices: Dict[str, float],
+    config: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Compile aggregated metrics for the clinic management dashboard."""
+    total_patients = len(patients)
+    total_doctors = len(doctors)
+    total_appointments = len(appointments)
 
-    if not isinstance(doctors, dict):
-        doctors = {}
+    completed_count = sum(1 for a in appointments if isinstance(a, dict) and a.get("status") == "completed")
+    cancelled_count = sum(1 for a in appointments if isinstance(a, dict) and a.get("status") == "cancelled")
+    pending_count = sum(1 for a in appointments if isinstance(a, dict) and a.get("status") == "pending")
 
-    records = _valid_appointments(appointments)
+    total_consultation_rev = 0.0
+    total_test_rev = 0.0
+    total_insurance_cov = 0.0
+    total_patient_rev = 0.0
 
-    doctor_report = generate_doctor_report(
-        patients, doctors, records, test_prices, config
-    )
-
-    patient_report = generate_patient_report(
-        patients, doctors, records, test_prices, config
-    )
-
-    completed = [
-        item for item in records
-        if item.get("status") == "completed"
-    ]
-
-    cancelled = [
-        item for item in records
-        if item.get("status") == "cancelled"
-    ]
-
-    pending = [
-        item for item in records
-        if item.get("status") == "pending"
-    ]
-
-    completed_bills = [
-        _get_bill(item, patients, doctors, test_prices, config)
-        for item in completed
-    ]
-
-    valid_bills = [
-        (appointment, bill)
-        for appointment, bill in zip(completed, completed_bills)
-        if bill is not None
-    ]
-
-    consultation_revenue = sum(
-        bill["consultation_fee"] for _, bill in valid_bills
-    )
-
-    test_revenue = sum(
-        bill["test_charges"] for _, bill in valid_bills
-    )
-
-    insurance_total = sum(
-        bill["insurance_coverage"] for _, bill in valid_bills
-    )
-
-    senior_discount_total = sum(
-        bill["senior_discount"] for _, bill in valid_bills
-    )
-
-    patient_revenue = sum(
-        bill["final_bill"] for _, bill in valid_bills
-    )
-
-    # Stable Doctor Tie-Breaker Implementation using original dictionary index
-    doc_keys_order = list(doctors.keys())
-    most_requested_doctor = max(
-        doctor_report.items(),
-        key=lambda item: (item[1]["appointments"], -doc_keys_order.index(item[0])),
-        default=None,
-    )
-
-    # Build ordered sequence for specializations based on insertion records appearance
-    specialization_counts = {}
-    spec_insertion_order = []
-
-    for appointment in records:
-        doctor_id = appointment.get("doctor_id")
-        if not isinstance(doctor_id, str):
+    for a in appointments:
+        if not isinstance(a, dict) or a.get("status") != "completed":
+            continue
+        bill = a.get("bill")
+        if not isinstance(bill, dict) or not bill:
             continue
 
-        doctor = doctors.get(doctor_id, {})
-        if not isinstance(doctor, dict):
+        total_consultation_rev += bill.get("consultation_fee", 0.0) - bill.get("consultation_coverage", 0.0)
+        total_test_rev += bill.get("test_charges", 0.0) - bill.get("test_coverage", 0.0)
+        total_insurance_cov += bill.get("insurance_coverage", 0.0)
+        total_patient_rev += bill.get("final_bill", 0.0)
+
+    spec_counts = {}
+    for a in appointments:
+        if not isinstance(a, dict):
             continue
+        did = a.get("doctor_id")
+        if did in doctors:
+            spec = doctors[did].get("specialization", "General")
+            spec_counts[spec] = spec_counts.get(spec, 0) + 1
 
-        specialization = doctor.get("specialization", "Unknown")
-        if not isinstance(specialization, str) or not specialization.strip():
-            specialization = "Unknown"
+    most_requested_spec = max(
+        spec_counts.items(),
+        key=lambda item: item[1],
+        default=("None", 0),
+    )[0]
 
-        if specialization not in specialization_counts:
-            specialization_counts[specialization] = 0
-            spec_insertion_order.append(specialization)
+    patient_spend = {}
+    for a in appointments:
+        if not isinstance(a, dict) or a.get("status") != "completed":
+            continue
+        pid = a.get("patient_id")
+        bill = a.get("bill")
+        if isinstance(bill, dict):
+            bill_amt = bill.get("final_bill", 0.0)
+            patient_spend[pid] = patient_spend.get(pid, 0.0) + bill_amt
 
-        specialization_counts[specialization] += 1
+    highest_spender_id = max(
+        patient_spend.items(),
+        key=lambda item: item[1],
+        default=(None, 0),
+    )[0]
+    highest_spender_name = patients.get(highest_spender_id, {}).get("name", "None") if highest_spender_id else "None"
 
-    most_requested_specialization = max(
-        specialization_counts.items(),
-        key=lambda item: (item[1], -spec_insertion_order.index(item[0])),
-        default=None,
-    )
-
-    # Stable Patient Metric Tie-Breakers
-    patient_keys_order = list(patients.keys())
-    highest_spending_patient = max(
-        patient_report.items(),
-        key=lambda item: (item[1]["patient_paid"], -patient_keys_order.index(item[0])),
-        default=None,
-    )
-
-    patient_with_most_appointments = max(
-        patient_report.items(),
-        key=lambda item: (item[1]["appointments"], -patient_keys_order.index(item[0])),
-        default=None,
-    )
-
-    # Safe Dynamic Configurations lookup engines
-    senior_age = (config or {}).get("senior_age", 60)
-
-    insured_patients = [
-        patient_id
-        for patient_id, patient in patients.items()
-        if isinstance(patient, dict)
-        and patient.get("insurance") is True
-    ]
-
-    senior_patients = [
-        patient_id
-        for patient_id, patient in patients.items()
-        if isinstance(patient, dict)
-        and isinstance(patient.get("age"), int)
-        and not isinstance(patient.get("age"), bool)
-        and patient["age"] >= senior_age
-    ]
-
-    patients_without_completed = [
-        patient_id
-        for patient_id, data in patient_report.items()
-        if data["completed_appointments"] == 0
-    ]
+    currency = config.get("currency", "$")
 
     return {
-        "total_patients": len(patients),
-        "total_doctors": len(doctors),
-        "total_appointments": len(records),
-        "completed": len(completed),
-        "cancelled": len(cancelled),
-        "pending": len(pending),
-        "total_consultation_revenue": consultation_revenue,
-        "total_test_revenue": test_revenue,
-        "total_insurance_coverage": insurance_total,
-        "total_senior_discount": senior_discount_total,
-        "total_patient_revenue": patient_revenue,
-        "most_requested_doctor": most_requested_doctor,
-        "most_requested_specialization": most_requested_specialization,
-        "highest_spending_patient": highest_spending_patient,
-        "patient_with_most_appointments": patient_with_most_appointments,
-        "patients_without_completed_appointment": patients_without_completed,
-        "insured_patients": insured_patients,
-        "senior_citizen_patients": senior_patients,
-        "doctor_report": doctor_report,
-        "patient_report": patient_report,
+        "total_patients": total_patients,
+        "total_doctors": total_doctors,
+        "total_appointments": total_appointments,
+        "completed": completed_count,
+        "cancelled": cancelled_count,
+        "pending": pending_count,
+        "consultation_revenue": total_consultation_rev,
+        "test_revenue": total_test_rev,
+        "insurance_coverage": total_insurance_cov,
+        "patient_revenue": total_patient_rev,
+        "most_requested_specialization": most_requested_spec,
+        "highest_spending_patient": highest_spender_name,
+        "currency": currency,
     }
 
 
-def print_clinic_dashboard(report, currency="$"):
-    """Display a readable clinic management dashboard."""
-    if not isinstance(report, dict):
-        print("Cannot display dashboard: invalid report.")
-        return
-    print("=" * 48)
-    print("            CLINIC DASHBOARD")
-    print("=" * 48)
-    print(f"Total Patients: {report.get('total_patients', 0)}")
-    print(f"Total Doctors: {report.get('total_doctors', 0)}")
-    print(f"Total Appointments: {report.get('total_appointments', 0)}")
-    print(f"Completed: {report.get('completed', 0)}")
-    print(f"Cancelled: {report.get('cancelled', 0)}")
-    print(f"Pending: {report.get('pending', 0)}")
-    print(
-        "Total Consultation Revenue: "
-        f"{currency}{report.get('total_consultation_revenue', 0):,.2f}"
-    )
-    print(
-        "Total Test Revenue: "
-        f"{currency}{report.get('total_test_revenue', 0):,.2f}"
-    )
+def print_clinic_dashboard(report: Dict[str, Any]) -> None:
+    """Print the formatted clinic management dashboard with complete metrics."""
+    curr = report.get("currency", "$")
+    print("\n" + "=" * 40)
+    print("           CLINIC DASHBOARD")
+    print("=" * 40)
+    print(f"Total Patients: {report['total_patients']}")
+    print(f"Total Doctors: {report['total_doctors']}")
+    print(f"Total Appointments: {report['total_appointments']}")
+    print(f"Completed: {report['completed']}")
+    print(f"Cancelled: {report['cancelled']}")
+    print(f"Pending: {report['pending']}")
+    print(f"Total Consultation Revenue: {curr}{report['consultation_revenue']:,.2f}")
+    print(f"Total Test Revenue: {curr}{report['test_revenue']:,.2f}")
+    print(f"Total Insurance Coverage: {curr}{report['insurance_coverage']:,.2f}")
+    print(f"Total Patient Revenue: {curr}{report['patient_revenue']:,.2f}")
+    print(f"Most Requested Specialization: {report['most_requested_specialization']}")
+    print(f"Highest Spending Patient: {report['highest_spending_patient']}")
+    print("=" * 40)

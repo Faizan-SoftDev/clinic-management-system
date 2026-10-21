@@ -4,12 +4,8 @@ import sys
 from config import CLINIC_CONFIG
 from data import patients, doctors, appointments, test_prices
 from reports import generate_clinic_report, print_clinic_dashboard, generate_doctor_report, generate_patient_report
-from appointments import process_appointment, cancel_appointment
+from appointments import process_appointment, cancel_appointment, find_appointment
 
-
-# =========================================================================
-# HELPER PRESENTATION UTILITIES (Fixes NameError by defining display loops)
-# =========================================================================
 
 def print_menu() -> None:
     """Render the dashboard interactive choice control grid."""
@@ -56,7 +52,6 @@ def display_appointments() -> None:
 def handle_process_appointment() -> None:
     """Workflow handler to transition pending queues to completed invoices."""
     app_id = input("Enter Appointment ID to process: ").strip()
-    # Direct safe link invocation back to our functional validation library patch
     result = process_appointment(app_id, patients, doctors, appointments, test_prices, CLINIC_CONFIG)
     if isinstance(result, tuple) and not result[0]:
         print(f"Operation Failed: {result[1]}")
@@ -104,10 +99,15 @@ def handle_patient_report() -> None:
 
 
 def handle_add_appointment() -> None:
-    """Book a new entry while running strict validation checks."""
+    """Book a new entry while running strict validation checks against duplicates."""
     from validation import validate_appointment
     print("\n--- SCHEDULING NEW ACTIVE APPOINTMENT ---")
     app_id = input("Generate New Unique App ID (e.g., A005): ").strip()
+
+    if find_appointment(app_id, appointments) is not None:
+        print(f"Booking Denied: Appointment ID {app_id} already exists.")
+        return
+
     pid = input("Enter Patient ID: ").strip()
     did = input("Enter Doctor ID: ").strip()
 
@@ -119,7 +119,6 @@ def handle_add_appointment() -> None:
         "tests": []
     }
 
-    # Secure validation check linked directly to double-booking rules logic
     validation_status = validate_appointment(new_app, patients, doctors, test_prices)
     if not validation_status[0]:
         print(f"Booking Denied: {validation_status[1]}")
@@ -127,10 +126,6 @@ def handle_add_appointment() -> None:
         appointments.append(new_app)
         print(f"Success: Appointment {app_id} safely queued to memory grid pipelines.")
 
-
-# =========================================================================
-# CORE CORE CONTROL RUNTIME LOOP
-# =========================================================================
 
 def main() -> None:
     """Main execution application engine control loop."""

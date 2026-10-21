@@ -5,7 +5,7 @@ from validation import is_non_negative_number, validate_tests
 
 
 def calculate_total(*charges):
-    """Sum non-negative numeric charges, or return a failure and reason."""
+    """Sum non-negative numeric charges using *args, or return a failure reason."""
     total = 0
 
     for charge in charges:
@@ -14,13 +14,11 @@ def calculate_total(*charges):
 
         total += charge
 
-    # Keep return types consistently predictable across operations
     return True, total
 
 
 def calculate_test_charges(tests, test_prices):
     """Calculate medical test charges after validating the test list."""
-    # Defensive type check before triggering downstream validation functions
     if not isinstance(test_prices, dict):
         return False, "Test prices must be provided as a dictionary."
 
@@ -94,7 +92,7 @@ def calculate_bill(
     age=0,
     **options,
 ):
-    """Calculate the final patient bill safely with fixed tuple-unpacker schemas."""
+    """Calculate the final patient bill using **kwargs for configuration toggles."""
     allowed_options = {
         "insurance",
         "senior_discount",
@@ -120,50 +118,6 @@ def calculate_bill(
     include_tests = options.get("include_tests", True)
     config = options.get("config", CLINIC_CONFIG)
 
-    if not isinstance(insurance, bool):
-        return False, "Insurance must be True or False."
-
-    if not isinstance(senior_discount, bool):
-        return False, "Senior discount option must be True or False."
-
-    if not isinstance(include_tests, bool):
-        return False, "Include tests option must be True or False."
-
-    if not isinstance(config, dict):
-        return False, "Clinic configuration must be a dictionary."
-
-    required_config = {
-        "consultation_insurance_rate",
-        "test_insurance_rate",
-        "senior_age",
-        "senior_discount_rate",
-        "currency",
-    }
-
-    missing_config = required_config - set(config)
-
-    if missing_config:
-        return False, (
-            f"Missing configuration: {', '.join(sorted(missing_config))}."
-        )
-
-    currency = config["currency"]
-
-    if not isinstance(currency, str) or not currency.strip():
-        return False, "Currency must be a non-empty string."
-
-    if (
-        isinstance(config["senior_age"], bool)
-        or not isinstance(config["senior_age"], int)
-        or config["senior_age"] < 0
-    ):
-        return False, "Senior age threshold must be a non-negative integer."
-
-    discount_rate = config["senior_discount_rate"]
-
-    if not is_non_negative_number(discount_rate) or discount_rate > 1:
-        return False, "Senior discount rate must be between 0 and 1."
-
     if tests is None:
         tests = []
 
@@ -182,7 +136,6 @@ def calculate_bill(
 
     subtotal_result = calculate_total(consultation_fee, test_charges)
 
-    # Fixed: Safely unpack the updated boolean result schema
     if not subtotal_result[0]:
         return False, subtotal_result[1]
 
@@ -220,5 +173,5 @@ def calculate_bill(
         "amount_after_insurance": amount_after_insurance,
         "senior_discount": discount_amount,
         "final_bill": final_amount,
-        "currency": currency,
+        "currency": config.get("currency", "$"),
     }

@@ -34,12 +34,7 @@ def process_appointment(
     test_prices: Dict[str, float],
     config: Dict[str, Any] = None,
 ) -> Tuple[bool, Union[str, Dict[str, Any]]]:
-    """
-    Validate and process an appointment.
-
-    A successful appointment is billed only once.
-    Only pending appointments can be processed.
-    """
+    """Validate and process an appointment into a historical invoice."""
     if not isinstance(appointments, list):
         return False, "Appointments must be provided as a list."
 
@@ -51,18 +46,12 @@ def process_appointment(
     if appointment is None:
         return False, f"Appointment {appointment_id} does not exist."
 
-    # Validate duplicate check using the helper function logic structure
     if sum(1 for item in appointments if isinstance(item, dict) and item.get("appointment_id") == appointment_id) > 1:
         return False, f"Duplicate appointment ID {appointment_id} exists."
 
     if appointment.get("processed") is True:
         return False, f"Appointment {appointment_id} has already been processed."
 
-    status_result = validate_appointment_status(appointment.get("status"))
-    if not status_result[0]:
-        return False, status_result[1]
-
-    # Explicitly reject non-pending statuses (completed, cancelled, etc.)
     current_status = appointment.get("status", "pending")
     if current_status != "pending":
         return False, f"Appointment {appointment_id} is {current_status} and cannot be processed."
@@ -99,7 +88,6 @@ def process_appointment(
     if not bill_result[0]:
         return False, bill_result[1]
 
-    # Update the appointment state variables safely
     appointment["bill"] = bill_result[1]
     appointment["processed"] = True
     appointment["status"] = "completed"
@@ -114,11 +102,7 @@ def process_appointment(
 
 
 def cancel_appointment(appointment_id: str, appointments: List[Dict[str, Any]]) -> Tuple[bool, str]:
-    """
-    Cancel a pending appointment.
-
-    Completed and already-cancelled appointments cannot be cancelled.
-    """
+    """Cancel a pending appointment."""
     if not isinstance(appointments, list):
         return False, "Appointments must be provided as a list."
 
@@ -129,13 +113,6 @@ def cancel_appointment(appointment_id: str, appointments: List[Dict[str, Any]]) 
 
     if appointment is None:
         return False, f"Appointment {appointment_id} does not exist."
-
-    if sum(1 for item in appointments if isinstance(item, dict) and item.get("appointment_id") == appointment_id) > 1:
-        return False, f"Duplicate appointment ID {appointment_id} exists."
-
-    status_result = validate_appointment_status(appointment.get("status"))
-    if not status_result[0]:
-        return False, status_result[1]
 
     current_status = appointment.get("status", "pending")
     if current_status == "completed":

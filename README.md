@@ -8,10 +8,10 @@ All runtime state structures live locally in Python `dictionaries` and `lists`. 
 ---
 
 ## 2. Features and Core System Capabilities
-* **Full CRUD Validations:** Robust administrative management over patients, doctors, scheduled logs, and master item cost files.
-* **Collision Blocker Engine:** Real-time prevention of duplicate appointment submissions or double-booking time slots for identical doctors.
-* **Deterministic Tie-Breakers:** High-fidelity reporting metrics that fallback safely to original configuration insertion tracking indices when analytics values match.
-* **Functional Modularity:** Clean boundary patterns separating data presentation schemas from operational calculation codeblocks.
+- **Full CRUD Validations:** Robust administrative management over patients, doctors, scheduled logs, and master item cost files.
+- **Collision Blocker Engine:** Real-time prevention of duplicate appointment submissions or double-booking time slots for identical doctors.
+- **Deterministic Tie-Breakers:** High-fidelity reporting metrics that fallback safely to original configuration insertion tracking indices when analytics values match.
+- **Functional Modularity:** Clean boundary patterns separating data presentation schemas from operational calculation codeblocks.
 
 ---
 
@@ -23,13 +23,13 @@ The invoice processor compiles totals dynamically using the following hierarchic
 4. **Historical Price Stability:** Completed visit records permanently embed calculation states inside isolated snapshots at boot execution times. Later configuration rate updates do not retroactively skew past financial records.
 
 ### Case Invariance Constraints
-* Medical target keys are sanitized via structural `casefold()` / `.lower()` pipelines to enforce safe keyword pricing matching. Duplicate inputs on similar diagnostic items return clean validation failure states.
+- Medical target keys are sanitized via structural `casefold()` / `.lower()` pipelines to enforce safe keyword pricing matching. Duplicate inputs on similar diagnostic items return clean validation failure states.
 
 ---
 
 ## 4. Advanced Architecture & Scope Closure Design
-* **Tuple Routing Interface:** Internal business operations strictly communicate using predictable outcome signatures like `(True, Success_Data)` or `(False, Error_Reason_String)`.
-* **Python Functional Closures:** The senior citizen calculation engine is built using nested **Functional Closures**. It traps config boundaries inside an inner runtime reference stack, illustrating pure **LEGB (Local, Enclosing, Global, Built-in)** scoping lookup layers. It processes logic pools without mutating global application dictionaries.
+- **Tuple Routing Interface:** Internal business operations strictly communicate using predictable outcome signatures like `(True, Success_Data)` or `(False, Error_Reason_String)`.
+- **Python Functional Closures:** The senior citizen calculation engine is built using nested **Functional Closures**. It traps config boundaries inside an inner runtime reference stack, illustrating pure **LEGB (Local, Enclosing, Global, Built-in)** scoping lookup layers. It processes logic pools without mutating global application dictionaries.
 
 ---
 
@@ -40,27 +40,3 @@ The system requires a standard installation of **Python 3.8+**.
 To launch the system interface control panel, execute the following script from your root project directory terminal:
 ```bash
 python3 app.py
-```
-
-### Executing the Automated Quality Test Suite
-To verify calculation structures, validation guardrails, and tie-breaking exceptions, compile the baseline test suite:
-```bash
-python3 test_clinic.py
-```
-
----
-
-## 6. Project Directory Mapping
-```text
-clinic-management-system/
-├── app.py                # Main interactive command-line presentation controller
-├── main.py               # Core application routing state router
-├── __main__.py           # Package orchestration gateway block
-├── appointments.py       # Active log processors and state workflow transitions
-├── billing.py            # Dynamic multi-charge billing engine (*args / **kwargs)
-├── config.py             # Global constants & Functional closure factories
-├── data.py               # In-memory storage matrix & Historical bootstrapping seed logs
-├── reports.py            # Analytical data aggregators & Stable dashboard engines
-├── validation.py         # Structural type-guards & Doctor double-booking block rules
-└── README.md             # Systems documentation profile
-```
