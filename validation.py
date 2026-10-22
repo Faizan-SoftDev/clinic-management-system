@@ -77,7 +77,7 @@ def validate_appointment_status(status):
 
 
 def validate_tests(tests, test_prices):
-    """Validate the test list, including invalid and duplicate tests securely."""
+    """Check that test names and prices are valid."""
     if not isinstance(tests, list):
         return False, "Tests must be provided as a list."
 
@@ -86,9 +86,9 @@ def validate_tests(tests, test_prices):
 
     for name, price in test_prices.items():
         if not isinstance(name, str):
-            return False, "All test directory master keys must be strings."
+            return False, "All test names must be strings."
         if not is_non_negative_number(price):
-            return False, f"Invalid price setup for master index '{name}'."
+            return False, f"Invalid price for test '{name}'."
 
     normalized_prices = {name.casefold(): price for name, price in test_prices.items()}
     seen_tests = set()
@@ -160,7 +160,13 @@ def validate_doctor_data(doctor):
     return True, "Doctor data is valid."
 
 
-def validate_appointment(appointment, patients, doctors, test_prices):
+def validate_appointment(
+    appointment,
+    patients,
+    doctors,
+    test_prices,
+    appointments=None,
+):
     """Validate an appointment fully."""
     if not isinstance(appointment, dict):
         return False, "Appointment must be a dictionary."
@@ -168,6 +174,17 @@ def validate_appointment(appointment, patients, doctors, test_prices):
     appointment_id = appointment.get("appointment_id")
     if not isinstance(appointment_id, str) or not appointment_id.strip():
         return False, "Appointment ID must be a non-empty string."
+
+    if appointments is not None:
+        if not isinstance(appointments, list):
+            return False, "Appointments must be provided as a list."
+        if any(
+            isinstance(existing, dict)
+            and existing is not appointment
+            and existing.get("appointment_id") == appointment_id
+            for existing in appointments
+        ):
+            return False, f"Appointment ID {appointment_id} already exists."
 
     patient_id = appointment.get("patient_id")
     result = validate_patient(patient_id, patients)

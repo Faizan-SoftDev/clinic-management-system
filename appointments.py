@@ -61,6 +61,7 @@ def process_appointment(
         patients,
         doctors,
         test_prices,
+        appointments,
     )
     if not validation_result[0]:
         return False, validation_result[1]

@@ -150,18 +150,22 @@ def generate_clinic_report(
     total_consultation_rev = 0.0
     total_test_rev = 0.0
     total_insurance_cov = 0.0
+    total_senior_discounts = 0.0
     total_patient_rev = 0.0
+    completed_without_bill_count = 0
 
     for a in appointments:
         if not isinstance(a, dict) or a.get("status") != "completed":
             continue
         bill = a.get("bill")
         if not isinstance(bill, dict) or not bill:
+            completed_without_bill_count += 1
             continue
 
         total_consultation_rev += bill.get("consultation_fee", 0.0) - bill.get("consultation_coverage", 0.0)
         total_test_rev += bill.get("test_charges", 0.0) - bill.get("test_coverage", 0.0)
         total_insurance_cov += bill.get("insurance_coverage", 0.0)
+        total_senior_discounts += bill.get("senior_discount", 0.0)
         total_patient_rev += bill.get("final_bill", 0.0)
 
     spec_counts = {}
@@ -208,7 +212,9 @@ def generate_clinic_report(
         "consultation_revenue": total_consultation_rev,
         "test_revenue": total_test_rev,
         "insurance_coverage": total_insurance_cov,
+        "senior_discounts": total_senior_discounts,
         "patient_revenue": total_patient_rev,
+        "completed_without_bill_count": completed_without_bill_count,
         "most_requested_specialization": most_requested_spec,
         "highest_spending_patient": highest_spender_name,
         "currency": currency,
@@ -221,16 +227,28 @@ def print_clinic_dashboard(report: Dict[str, Any]) -> None:
     print("\n" + "=" * 40)
     print("           CLINIC DASHBOARD")
     print("=" * 40)
-    print(f"Total Patients: {report['total_patients']}")
-    print(f"Total Doctors: {report['total_doctors']}")
-    print(f"Total Appointments: {report['total_appointments']}")
-    print(f"Completed: {report['completed']}")
-    print(f"Cancelled: {report['cancelled']}")
-    print(f"Pending: {report['pending']}")
-    print(f"Total Consultation Revenue: {curr}{report['consultation_revenue']:,.2f}")
-    print(f"Total Test Revenue: {curr}{report['test_revenue']:,.2f}")
-    print(f"Total Insurance Coverage: {curr}{report['insurance_coverage']:,.2f}")
-    print(f"Total Patient Revenue: {curr}{report['patient_revenue']:,.2f}")
-    print(f"Most Requested Specialization: {report['most_requested_specialization']}")
-    print(f"Highest Spending Patient: {report['highest_spending_patient']}")
+    print(f"Total Patients: {report.get('total_patients', 0)}")
+    print(f"Total Doctors: {report.get('total_doctors', 0)}")
+    print(f"Total Appointments: {report.get('total_appointments', 0)}")
+    print(f"Completed: {report.get('completed', 0)}")
+    print(f"Cancelled: {report.get('cancelled', 0)}")
+    print(f"Pending: {report.get('pending', 0)}")
+    print(f"Total Consultation Revenue: {curr}{report.get('consultation_revenue', 0):,.2f}")
+    print(f"Total Test Revenue: {curr}{report.get('test_revenue', 0):,.2f}")
+    print(f"Total Insurance Coverage: {curr}{report.get('insurance_coverage', 0):,.2f}")
+    print(f"Total Senior Discounts: {curr}{report.get('senior_discounts', 0):,.2f}")
+    print(f"Total Patient Revenue: {curr}{report.get('patient_revenue', 0):,.2f}")
+    missing_bill_count = report.get("completed_without_bill_count", 0)
+    if missing_bill_count:
+        appointment_word = "appointment" if missing_bill_count == 1 else "appointments"
+        verb = "has" if missing_bill_count == 1 else "have"
+        print(
+            f"Warning: {missing_bill_count} completed {appointment_word} "
+            f"{verb} no bill."
+        )
+    print(
+        "Most Requested Specialization: "
+        f"{report.get('most_requested_specialization', 'None')}"
+    )
+    print(f"Highest Spending Patient: {report.get('highest_spending_patient', 'None')}")
     print("=" * 40)

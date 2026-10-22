@@ -1,7 +1,12 @@
 """Automated tests for the Clinic Management System."""
 
 from copy import deepcopy
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
+import subprocess
 import sys
+from unittest.mock import patch
 
 from data import patients, doctors, appointments, test_prices
 from config import CLINIC_CONFIG
@@ -10,6 +15,7 @@ from validation import (
     validate_patient,
     validate_doctor,
     validate_appointment_status,
+    validate_appointment,
     validate_tests,
 )
 
@@ -19,14 +25,16 @@ from reports import (
     generate_clinic_report,
     generate_doctor_report,
     generate_patient_report,
+    print_clinic_dashboard,
 )
+from main import handle_sample_bill
 
 passed = 0
 failed = 0
 
 
 def run_test(test_name, test_function):
-    """Run a test and report its result smoothly without cutting off workflow pipelines."""
+    """Run one test and report its result."""
     global passed, failed
 
     try:
@@ -258,11 +266,20 @@ def test_process_appointment():
     )
     assert result[0] is True, f"Processing failed: {result}"
     assert test_appointments[0]["status"] == "completed"
+    repeated_result = process_appointment(
+        "AT002",
+        deepcopy(patients),
+        deepcopy(doctors),
+        test_appointments,
+        deepcopy(test_prices),
+        deepcopy(CLINIC_CONFIG),
+    )
+    assert repeated_result[0] is False, "An appointment was processed twice."
 
 
 def test_saved_seed_bills_keep_historical_prices():
     test_doctors = deepcopy(doctors)
-    test_doctors["D001"]["fee"] = 5000
+    test_doctors["D001"]["fee"] = 99999
     report = generate_clinic_report(
         deepcopy(patients),
         test_doctors,
@@ -270,39 +287,166 @@ def test_saved_seed_bills_keep_historical_prices():
         deepcopy(test_prices),
         CLINIC_CONFIG,
     )
-    assert isinstance(report, dict)
+    assert report["patient_revenue"] == 13100
 
 
-# Execution controller map block
+def test_duplicate_appointment_id_is_rejected_by_validation():
+    new_appointment = {
+        "appointment_id": "A001",
+        "patient_id": "P001",
+        "doctor_id": "D001",
+        "status": "pending",
+        "tests": [],
+    }
+    result = validate_appointment(
+        new_appointment,
+        deepcopy(patients),
+        deepcopy(doctors),
+        deepcopy(test_prices),
+        deepcopy(appointments),
+    )
+    assert result[0] is False
+    assert "already exists" in result[1]
+
+
+def test_unavailable_doctor_is_rejected():
+    test_doctors = deepcopy(doctors)
+    test_doctors["D001"]["available"] = False
+    new_appointment = {
+        "appointment_id": "AT003",
+        "patient_id": "P001",
+        "doctor_id": "D001",
+        "status": "pending",
+        "tests": [],
+    }
+    result = validate_appointment(
+        new_appointment,
+        deepcopy(patients),
+        test_doctors,
+        deepcopy(test_prices),
+        [],
+    )
+    assert result[0] is False
+    assert "not available" in result[1]
+
+
+def test_empty_dashboard_report_prints_defaults():
+    output = StringIO()
+    with redirect_stdout(output):
+        print_clinic_dashboard({})
+    dashboard = output.getvalue()
+    assert "Total Patients: 0" in dashboard
+    assert "Total Patient Revenue: $0.00" in dashboard
+
+
+def test_dashboard_revenue_and_senior_discount_totals():
+    report = generate_clinic_report(
+        deepcopy(patients),
+        deepcopy(doctors),
+        deepcopy(appointments),
+        deepcopy(test_prices),
+        CLINIC_CONFIG,
+    )
+    assert report["consultation_revenue"] == 11000
+    assert report["test_revenue"] == 2750
+    assert report["senior_discounts"] == 650
+    assert report["patient_revenue"] == 13100
+
+    output = StringIO()
+    with redirect_stdout(output):
+        print_clinic_dashboard(report)
+    assert "Total Senior Discounts: $650.00" in output.getvalue()
+
+
+def test_completed_appointment_without_bill_is_reported():
+    test_appointments = deepcopy(appointments)
+    test_appointments.append(
+        {
+            "appointment_id": "AT004",
+            "patient_id": "P001",
+            "doctor_id": "D001",
+            "status": "completed",
+            "tests": [],
+        }
+    )
+    report = generate_clinic_report(
+        deepcopy(patients),
+        deepcopy(doctors),
+        test_appointments,
+        deepcopy(test_prices),
+        CLINIC_CONFIG,
+    )
+    assert report["completed"] == 4
+    assert report["patient_revenue"] == 13100
+    assert report["completed_without_bill_count"] == 1
+
+    output = StringIO()
+    with redirect_stdout(output):
+        print_clinic_dashboard(report)
+    assert "Warning: 1 completed appointment has no bill." in output.getvalue()
+
+
+def test_python3_dot_starts_the_application():
+    project_dir = Path(__file__).resolve().parent
+    result = subprocess.run(
+        [sys.executable, "."],
+        cwd=project_dir,
+        input="0\n",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "CLINIC MANAGEMENT PORTAL" in result.stdout
+
+
+def test_sample_bill_accepts_tests_and_prints_bill_lines():
+    output = StringIO()
+    with patch("builtins.input", side_effect=["P001", "D001", "ECG, Blood Test"]):
+        with redirect_stdout(output):
+            handle_sample_bill()
+    bill_output = output.getvalue()
+    assert "Test charges: $2,500.00" in bill_output
+    assert "Final bill: $5,250.00" in bill_output
+    assert "Simulated Matrix Output" not in bill_output
+
+
 if __name__ == "__main__":
     tests_map = {
-        "Age 59 No Senior Discount": test_age_59_no_senior_discount,
-        "Age 60 Senior Discount Applied": test_age_60_senior_discount,
-        "Negative Age Verification Check": test_negative_age,
-        "Invalid Insurance Key Values": test_invalid_insurance_value,
-        "Unknown Medical Catalog Tests": test_unknown_medical_test,
-        "Zero Rate Base Fee Setup": test_zero_fee,
-        "Rejection of Negative Balances": test_calculate_total_rejects_invalid_charges,
-        "Existing Base Patient Index": test_existing_patient,
-        "Invalid Out-of-bounds Patient ID": test_invalid_patient,
-        "Existing Verified Doctor Profiler": test_existing_doctor,
-        "Unknown Process State Status": test_invalid_status,
-        "Valid Compound Test Bundles": test_valid_medical_tests,
-        "Duplicate Test Request Blocker": test_duplicate_medical_tests,
-        "Standard Billing Without Insurance": test_bill_without_insurance,
-        "Standard Billing Coupled With Insurance": test_bill_with_insurance,
-        "Senior Citizen Target Discounter": test_senior_citizen_discount,
-        "Negative Base consultation Rate Block": test_invalid_consultation_fee,
-        "Cancel Active Pending Logs": test_cancel_pending_appointment,
-        "Cancel Non-existent Order Records": test_cancel_unknown_appointment,
-        "Process System Appointment Lifecycle": test_process_appointment,
-        "Historical Audit Preservation Integrity": test_saved_seed_bills_keep_historical_prices,
+        "Age 59: no senior discount": test_age_59_no_senior_discount,
+        "Age 60: senior discount": test_age_60_senior_discount,
+        "Reject negative age": test_negative_age,
+        "Reject invalid insurance value": test_invalid_insurance_value,
+        "Reject unknown medical test": test_unknown_medical_test,
+        "Allow zero consultation fee": test_zero_fee,
+        "Reject invalid charges": test_calculate_total_rejects_invalid_charges,
+        "Find existing patient": test_existing_patient,
+        "Reject unknown patient": test_invalid_patient,
+        "Find existing doctor": test_existing_doctor,
+        "Reject invalid appointment status": test_invalid_status,
+        "Accept valid medical tests": test_valid_medical_tests,
+        "Reject duplicate medical tests": test_duplicate_medical_tests,
+        "Bill without insurance": test_bill_without_insurance,
+        "Bill with insurance": test_bill_with_insurance,
+        "Apply senior discount": test_senior_citizen_discount,
+        "Reject negative consultation fee": test_invalid_consultation_fee,
+        "Cancel pending appointment": test_cancel_pending_appointment,
+        "Reject cancellation of unknown appointment": test_cancel_unknown_appointment,
+        "Process appointment once": test_process_appointment,
+        "Keep historical seed prices": test_saved_seed_bills_keep_historical_prices,
+        "Reject duplicate appointment ID": test_duplicate_appointment_id_is_rejected_by_validation,
+        "Reject unavailable doctor": test_unavailable_doctor_is_rejected,
+        "Print empty dashboard": test_empty_dashboard_report_prints_defaults,
+        "Show dashboard revenue and discounts": test_dashboard_revenue_and_senior_discount_totals,
+        "Warn when completed appointment has no bill": test_completed_appointment_without_bill_is_reported,
+        "Run application with python3 dot": test_python3_dot_starts_the_application,
+        "Print sample bill with selected tests": test_sample_bill_accepts_tests_and_prints_bill_lines,
     }
 
-    print("=================== STARTING CLINIC PORTAL TEST SUITE ===================")
+    print("=================== CLINIC MANAGEMENT TESTS ===================")
     for name, func in tests_map.items():
         run_test(name, func)
 
-    print("\n=================== FINAL PERFORMANCE ANALYSIS ===================")
+    print("\n=================== TEST SUMMARY ===================")
     print(f"Total Tests Executed: {passed + failed} | PASSED: {passed} | FAILED: {failed}")
     sys.exit(failed)
