@@ -1,149 +1,96 @@
-"""Appointment processing and cancellation for the clinic."""
-from typing import List, Dict, Any, Tuple, Union
+"""Lifecycle management for patient appointments."""
+
+from typing import Dict, List, Any, Tuple
+from validation import validate_appointment, validate_appointment_status
 from billing import calculate_bill
-from validation import (
-    validate_appointment,
-    validate_appointment_status,
-)
+from config import CLINIC_CONFIG
 
 
-def find_appointment(appointment_id: str, appointments: List[Dict[str, Any]]) -> Union[Dict[str, Any], None]:
-    """Find an appointment by ID without modifying the data."""
-    if (
-        not isinstance(appointment_id, str)
-        or not appointment_id.strip()
-        or not isinstance(appointments, list)
-    ):
-        return None
+def book_appointment(
+    appointment_id: str,
+    patient_id: str,
+    doctor_id: str,
+    date: str,
+    time_slot: str,
+    tests: List[str],
+    patients: Dict[str, Any],
+    doctors: Dict[str, Any],
+    test_prices: Dict[str, float],
+    appointments: List[Dict[str, Any]],
+) -> Tuple[bool, str]:
+    """Book a new pending appointment after passing all validation rules."""
+    new_app = {
+        "appointment_id": appointment_id,
+        "patient_id": patient_id,
+        "doctor_id": doctor_id,
+        "date": date,
+        "time_slot": time_slot,
+        "tests": tests,
+        "status": "pending",
+    }
 
-    for appointment in appointments:
-        if (
-            isinstance(appointment, dict)
-            and appointment.get("appointment_id") == appointment_id
-        ):
-            return appointment
+    valid, msg = validate_appointment(new_app, patients, doctors, test_prices, appointments)
+    if not valid:
+        return False, msg
 
-    return None
+    appointments.append(new_app)
+    return True, f"Appointment '{appointment_id}' successfully booked."
 
 
 def process_appointment(
     appointment_id: str,
+    appointments: List[Dict[str, Any]],
     patients: Dict[str, Any],
     doctors: Dict[str, Any],
-    appointments: List[Dict[str, Any]],
     test_prices: Dict[str, float],
     config: Dict[str, Any] = None,
-) -> Tuple[bool, Union[str, Dict[str, Any]]]:
-    """
-    Validate and process an appointment.
+) -> Tuple[bool, str]:
+    """Process a pending appointment to completed status and attach its bill."""
+    if config is None:
+        config = CLINIC_CONFIG
 
-    A successful appointment is billed only once.
-    Only pending appointments can be processed.
-    """
-    if not isinstance(appointments, list):
-        return False, "Appointments must be provided as a list."
+    app = next((a for a in appointments if isinstance(a, dict) and a.get("appointment_id") == appointment_id), None)
+    if not app:
+        return False, f"Appointment '{appointment_id}' not found."
 
-    if not isinstance(appointment_id, str) or not appointment_id.strip():
-        return False, "Appointment ID must be a non-empty string."
+    if app.get("status") == "completed":
+        return False, f"Appointment '{appointment_id}' is already completed."
+    if app.get("status") == "cancelled":
+        return False, f"Cannot process cancelled appointment '{appointment_id}'."
 
-    appointment = find_appointment(appointment_id, appointments)
+    patient = patients.get(app["patient_id"], {})
+    doctor = doctors.get(app["doctor_id"], {})
 
-    if appointment is None:
-        return False, f"Appointment {appointment_id} does not exist."
-
-    # Validate duplicate check using the helper function logic structure
-    if sum(1 for item in appointments if isinstance(item, dict) and item.get("appointment_id") == appointment_id) > 1:
-        return False, f"Duplicate appointment ID {appointment_id} exists."
-
-    if appointment.get("processed") is True:
-        return False, f"Appointment {appointment_id} has already been processed."
-
-    status_result = validate_appointment_status(appointment.get("status"))
-    if not status_result[0]:
-        return False, status_result[1]
-
-    # Explicitly reject non-pending statuses (completed, cancelled, etc.)
-    current_status = appointment.get("status", "pending")
-    if current_status != "pending":
-        return False, f"Appointment {appointment_id} is {current_status} and cannot be processed."
-
-    validation_result = validate_appointment(
-        appointment,
-        patients,
-        doctors,
+    success, res = calculate_bill(
+        doctor.get("fee", 0),
+        app.get("tests", []),
         test_prices,
-    )
-    if not validation_result[0]:
-        return False, validation_result[1]
-
-    patient = patients[appointment["patient_id"]]
-    doctor = doctors[appointment["doctor_id"]]
-
-    billing_options = {
-        "insurance": patient["insurance"],
-        "senior_discount": True,
-        "include_tests": True,
-    }
-
-    if config is not None:
-        billing_options["config"] = config
-
-    bill_result = calculate_bill(
-        doctor["fee"],
-        appointment["tests"],
-        test_prices,
-        patient["age"],
-        **billing_options,
+        patient.get("age", 0),
+        insurance=patient.get("insurance", False),
+        senior_discount=True,
+        include_tests=True,
+        config=config,
     )
 
-    if not bill_result[0]:
-        return False, bill_result[1]
+    if not success:
+        return False, f"Failed to generate bill: {res}"
 
-    # Update the appointment state variables safely
-    appointment["bill"] = bill_result[1]
-    appointment["processed"] = True
-    appointment["status"] = "completed"
-
-    return True, {
-        "appointment_id": appointment_id,
-        "patient_name": patient["name"],
-        "doctor_name": doctor["name"],
-        "bill": bill_result[1],
-        "message": f"Appointment {appointment_id} processed successfully.",
-    }
+    app["status"] = "completed"
+    app["bill"] = res
+    app["processed"] = True
+    return True, f"Appointment '{appointment_id}' processed successfully."
 
 
 def cancel_appointment(appointment_id: str, appointments: List[Dict[str, Any]]) -> Tuple[bool, str]:
-    """
-    Cancel a pending appointment.
+    """Cancel an active pending appointment."""
+    app = next((a for a in appointments if isinstance(a, dict) and a.get("appointment_id") == appointment_id), None)
+    if not app:
+        return False, f"Appointment '{appointment_id}' not found."
 
-    Completed and already-cancelled appointments cannot be cancelled.
-    """
-    if not isinstance(appointments, list):
-        return False, "Appointments must be provided as a list."
+    if app.get("status") == "completed":
+        return False, f"Cannot cancel completed appointment '{appointment_id}'."
+    if app.get("status") == "cancelled":
+        return False, f"Appointment '{appointment_id}' is already cancelled."
 
-    if not isinstance(appointment_id, str) or not appointment_id.strip():
-        return False, "Appointment ID must be a non-empty string."
-
-    appointment = find_appointment(appointment_id, appointments)
-
-    if appointment is None:
-        return False, f"Appointment {appointment_id} does not exist."
-
-    if sum(1 for item in appointments if isinstance(item, dict) and item.get("appointment_id") == appointment_id) > 1:
-        return False, f"Duplicate appointment ID {appointment_id} exists."
-
-    status_result = validate_appointment_status(appointment.get("status"))
-    if not status_result[0]:
-        return False, status_result[1]
-
-    current_status = appointment.get("status", "pending")
-    if current_status == "completed":
-        return False, f"Completed appointment {appointment_id} cannot be cancelled."
-
-    if current_status == "cancelled":
-        return False, f"Appointment {appointment_id} is already cancelled."
-
-    appointment["status"] = "cancelled"
-
-    return True, f"Appointment {appointment_id} cancelled successfully."
+    app["status"] = "cancelled"
+    return True, f"Appointment '{appointment_id}' cancelled successfully."

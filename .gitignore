@@ -11,3 +11,8 @@ __pycache__/
 
 # PyCharm settings
 .idea/
+
+.idea/
+.run/
+.venv/
+__pycache__/
