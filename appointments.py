@@ -43,6 +43,11 @@ def _normalize_time_slot(time_slot):
         return None
 
 
+def _current_datetime():
+    """Return the current local date and time for appointment validation."""
+    return datetime.now()
+
+
 def book_appointment(
     appointment_id,
     patient_id,
@@ -74,8 +79,15 @@ def book_appointment(
     if normalized_time is None:
         return False, "Appointment time must use HH:MM AM/PM format."
 
-    if appointment_date < datetime.today().date():
+    current_datetime = _current_datetime()
+    if appointment_date < current_datetime.date():
         return False, "Appointment date cannot be in the past."
+
+    appointment_time = datetime.strptime(normalized_time, "%I:%M %p").time()
+    if appointment_date == current_datetime.date() and (
+        appointment_time <= current_datetime.time()
+    ):
+        return False, "Appointment time cannot be in the past."
 
     appointment_id = normalize_id(appointment_id)
     patient_id = normalize_id(patient_id)

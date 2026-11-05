@@ -13,8 +13,9 @@ there is no database, file storage, framework, or third-party dependency.
 - Validate appointment details and reject invalid or duplicate operations
   with a reason.
 - Process pending appointments once and cancel pending appointments.
-- Book appointments with a valid date and time, preventing a doctor's
-  active appointments from sharing a time slot.
+- Book appointments with a valid future date and time, preventing a doctor's
+  active appointments from sharing a time slot. Times earlier than the current
+  local time are rejected when booking for today.
 - Generate clinic, doctor, and patient reports.
 - Support configurable billing options through `**kwargs`, and total multiple
   charges with `*args`.
@@ -56,11 +57,12 @@ Total Appointments: 4
 Completed: 3
 Cancelled: 1
 Pending: 0
-Gross Consultation Charges: $12,000.00
-Gross Test Charges: $4,000.00
-Total Insurance Coverage: $2,250.00
-Total Senior Citizen Discount: $650.00
-Total Patient Revenue: $13,100.00
+Gross Consultation Charges: PKR 12,000.00
+Gross Test Charges: PKR 4,000.00
+Total Insurance Coverage: PKR 2,250.00
+Total Senior Citizen Discount: PKR 650.00
+Total Patient Revenue: PKR 13,100.00
+
 Most Requested Specialization: Cardiology
 Highest Spending Patient: Usman Ali
 Most Requested Doctor: Dr. Hassan

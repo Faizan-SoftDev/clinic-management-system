@@ -1,7 +1,7 @@
 """Command-line Clinic Management System."""
 
 from data import patients, doctors, appointments, test_prices
-from config import CLINIC_CONFIG
+from config import CLINIC_CONFIG, format_currency
 from appointments import book_appointment, process_appointment, cancel_appointment
 from billing import calculate_bill
 from reports import (
@@ -69,7 +69,7 @@ def display_doctors():
             f"{doctor_id} | "
             f"Name: {doctor.get('name', 'Unknown')} | "
             f"Specialization: {doctor.get('specialization', 'Unknown')} | "
-            f"Fee: {CLINIC_CONFIG['currency']}{doctor.get('fee', 0)} | "
+            f"Fee: {format_currency(doctor.get('fee', 0))} | "
             f"Available: {doctor.get('available', False)}"
         )
 
@@ -119,15 +119,13 @@ def handle_process_appointment():
     print(f"Doctor: {result['doctor_name']}")
 
     bill = result["bill"]
-    currency = bill["currency"]
-
     print("\nBILL DETAILS")
-    print(f"Consultation fee: {currency}{bill['consultation_fee']:,.2f}")
-    print(f"Test charges: {currency}{bill['test_charges']:,.2f}")
-    print(f"Subtotal: {currency}{bill['subtotal']:,.2f}")
-    print(f"Insurance coverage: {currency}{bill['insurance_coverage']:,.2f}")
-    print(f"Senior discount: {currency}{bill['senior_discount']:,.2f}")
-    print(f"Final bill: {currency}{bill['final_bill']:,.2f}")
+    print(f"Consultation fee: {format_currency(bill['consultation_fee'], bill['currency'])}")
+    print(f"Test charges: {format_currency(bill['test_charges'], bill['currency'])}")
+    print(f"Subtotal: {format_currency(bill['subtotal'], bill['currency'])}")
+    print(f"Insurance coverage: {format_currency(bill['insurance_coverage'], bill['currency'])}")
+    print(f"Senior discount: {format_currency(bill['senior_discount'], bill['currency'])}")
+    print(f"Final bill: {format_currency(bill['final_bill'], bill['currency'])}")
 
 
 def handle_cancel_appointment():
@@ -195,17 +193,15 @@ def handle_sample_bill():
         return
 
     bill = result[1]
-    currency = bill["currency"]
-
     print("\nSAMPLE BILL")
     print(f"Patient: {patient['name']}")
     print(f"Doctor: {doctor['name']}")
-    print(f"Consultation fee: {currency}{bill['consultation_fee']:,.2f}")
-    print(f"Test charges: {currency}{bill['test_charges']:,.2f}")
-    print(f"Subtotal: {currency}{bill['subtotal']:,.2f}")
-    print(f"Insurance coverage: {currency}{bill['insurance_coverage']:,.2f}")
-    print(f"Senior discount: {currency}{bill['senior_discount']:,.2f}")
-    print(f"Final amount: {currency}{bill['final_bill']:,.2f}")
+    print(f"Consultation fee: {format_currency(bill['consultation_fee'], bill['currency'])}")
+    print(f"Test charges: {format_currency(bill['test_charges'], bill['currency'])}")
+    print(f"Subtotal: {format_currency(bill['subtotal'], bill['currency'])}")
+    print(f"Insurance coverage: {format_currency(bill['insurance_coverage'], bill['currency'])}")
+    print(f"Senior discount: {format_currency(bill['senior_discount'], bill['currency'])}")
+    print(f"Final amount: {format_currency(bill['final_bill'], bill['currency'])}")
     print("Note: This is a calculation only; no appointment was processed.")
 
 
@@ -227,8 +223,8 @@ def handle_doctor_report():
         print(f"Appointments: {details['appointments']}")
         print(f"Completed: {details['completed_appointments']}")
         print(f"Cancelled: {details['cancelled_appointments']}")
-        print(f"Revenue: {CLINIC_CONFIG['currency']}{details['total_revenue']:,.2f}")
-        print(f"Average bill: {CLINIC_CONFIG['currency']}{details['average_bill']:,.2f}")
+        print(f"Revenue: {format_currency(details['total_revenue'])}")
+        print(f"Average bill: {format_currency(details['average_bill'])}")
 
 
 def handle_patient_report():
@@ -251,15 +247,15 @@ def handle_patient_report():
         print(f"Cancelled: {details['cancelled_appointments']}")
         print(
             "Medical charges: "
-            f"{CLINIC_CONFIG['currency']}{details['total_medical_charges']:,.2f}"
+            f"{format_currency(details['total_medical_charges'])}"
         )
         print(
             "Insurance coverage: "
-            f"{CLINIC_CONFIG['currency']}{details['insurance_coverage']:,.2f}"
+            f"{format_currency(details['insurance_coverage'])}"
         )
         print(
             "Patient paid: "
-            f"{CLINIC_CONFIG['currency']}{details['patient_paid']:,.2f}"
+            f"{format_currency(details['patient_paid'])}"
         )
 
 

@@ -3,13 +3,14 @@
 from copy import deepcopy
 from contextlib import redirect_stdout
 from pathlib import Path
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import subprocess
 from io import StringIO
 import sys
+from unittest.mock import patch
 
 from data import patients, doctors, appointments, test_prices
-from config import CLINIC_CONFIG
+from config import CLINIC_CONFIG, format_currency
 
 from validation import (
     validate_patient,
@@ -644,8 +645,8 @@ def test_dashboard_accepts_incomplete_report():
     output = StringIO()
     with redirect_stdout(output):
         print_clinic_dashboard({})
-    assert "Total Senior Citizen Discount: PKR0.00" in output.getvalue()
-    assert "Gross Consultation Charges: PKR0.00" in output.getvalue()
+    assert "Total Senior Citizen Discount: PKR 0.00" in output.getvalue()
+    assert "Gross Consultation Charges: PKR 0.00" in output.getvalue()
 
 
 def test_reports_handle_malformed_saved_bills_and_dashboard_values():
@@ -669,7 +670,7 @@ def test_reports_handle_malformed_saved_bills_and_dashboard_values():
         print_clinic_dashboard({"total_patient_revenue": "invalid"}, 123)
 
     assert report["total_patient_revenue"] == 0
-    assert "Total Patient Revenue: PKR0.00" in output.getvalue()
+    assert "Total Patient Revenue: PKR 0.00" in output.getvalue()
 
 
 def test_time_and_id_normalization_and_past_date_rejection():
@@ -720,6 +721,111 @@ def test_dashboard_warns_about_unbilled_completed_visits():
     with redirect_stdout(output):
         print_clinic_dashboard(report)
     assert "WARNING: Completed visits without saved bills:  AT014 " in output.getvalue()
+
+
+def test_booking_rejects_past_and_earlier_today_times():
+    fixed_now = datetime(2026, 11, 5, 15, 0)
+    booking_data = (
+        deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), []
+    )
+
+    with patch("appointments._current_datetime", return_value=fixed_now):
+        past_date = book_appointment(
+            "AT020", "P001", "D001", "2026-11-04", "04:00 PM", [],
+            *booking_data,
+        )
+        earlier_today = book_appointment(
+            "AT021", "P001", "D001", "2026-11-05", "02:00 PM", [],
+            *booking_data,
+        )
+
+    assert past_date[0] is False
+    assert "date" in past_date[1].lower()
+    assert earlier_today[0] is False
+    assert "time" in earlier_today[1].lower()
+
+
+def test_booking_accepts_future_today_and_tomorrow_times():
+    fixed_now = datetime(2026, 11, 5, 15, 0)
+    scheduled = []
+
+    with patch("appointments._current_datetime", return_value=fixed_now):
+        later_today = book_appointment(
+            "AT022", "P001", "D001", "2026-11-05", "04:00 PM", [],
+            deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+        )
+        tomorrow = book_appointment(
+            "AT023", "P002", "D001", "2026-11-06", "09:00 AM", [],
+            deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+        )
+
+    assert later_today[0] is True
+    assert tomorrow[0] is True
+
+
+def test_booking_handles_invalid_date_and_time_with_fixed_clock():
+    fixed_now = datetime(2026, 11, 5, 15, 0)
+
+    with patch("appointments._current_datetime", return_value=fixed_now):
+        invalid_date = book_appointment(
+            "AT024", "P001", "D001", "not-a-date", "04:00 PM", [],
+            deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), [],
+        )
+        invalid_time = book_appointment(
+            "AT025", "P001", "D001", "2026-11-05", "25:00", [],
+            deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), [],
+        )
+
+    assert invalid_date[0] is False
+    assert invalid_time[0] is False
+
+
+def test_double_booking_rejects_differently_written_times():
+    fixed_now = datetime(2026, 11, 5, 15, 0)
+    scheduled = []
+
+    with patch("appointments._current_datetime", return_value=fixed_now):
+        first = book_appointment(
+            "AT026", "P001", "D001", "2026-11-06", "10:00 am", [],
+            deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+        )
+        collision = book_appointment(
+            "AT027", "P002", "D001", "2026-11-06", "10:00 AM", [],
+            deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+        )
+
+    assert first[0] is True
+    assert collision[0] is False
+
+
+def test_billing_and_insurance_amounts_remain_unchanged():
+    result = calculate_bill(
+        5000, ["ECG", "Blood Test"], test_prices, age=67,
+        insurance=True, config=CLINIC_CONFIG,
+    )
+
+    assert result[0] is True
+    bill = result[1]
+    assert bill["subtotal"] == 7500
+    assert bill["insurance_coverage"] == 2250
+    assert bill["senior_discount"] == 525
+    assert bill["final_bill"] == 4725
+
+
+def test_currency_formatting_is_consistent_in_display_output():
+    from main import display_doctors
+    from reports import print_clinic_dashboard
+
+    assert format_currency(5850.567) == "PKR 5,850.57"
+    doctor_output = StringIO()
+    dashboard_output = StringIO()
+    with redirect_stdout(doctor_output):
+        display_doctors()
+    with redirect_stdout(dashboard_output):
+        print_clinic_dashboard({})
+
+    assert "Fee: PKR 5,000.00" in doctor_output.getvalue()
+    assert "Gross Consultation Charges: PKR 0.00" in dashboard_output.getvalue()
 
 
 if __name__ == "__main__":
@@ -792,6 +898,18 @@ if __name__ == "__main__":
         ("Default currency is PKR", test_default_currency_is_pkr),
         ("Dashboard warns about unbilled visits",
          test_dashboard_warns_about_unbilled_completed_visits),
+        ("Past dates and earlier today times are rejected",
+         test_booking_rejects_past_and_earlier_today_times),
+        ("Future today and tomorrow times are accepted",
+         test_booking_accepts_future_today_and_tomorrow_times),
+        ("Invalid date and time are safe with fixed clock",
+         test_booking_handles_invalid_date_and_time_with_fixed_clock),
+        ("Normalized times block double booking",
+         test_double_booking_rejects_differently_written_times),
+        ("Billing and insurance amounts are unchanged",
+         test_billing_and_insurance_amounts_remain_unchanged),
+        ("Currency formatting is consistent",
+         test_currency_formatting_is_consistent_in_display_output),
     ]
 
     for test_name, test_function in tests:

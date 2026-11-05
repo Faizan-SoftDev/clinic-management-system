@@ -1,7 +1,7 @@
 """Management reports for the Clinic Management System."""
 
 from billing import calculate_bill
-from config import CLINIC_CONFIG
+from config import CLINIC_CONFIG, format_currency
 from validation import is_non_negative_number, normalize_id
 
 
@@ -381,8 +381,8 @@ def print_clinic_dashboard(report, currency=CLINIC_CONFIG["currency"]):
     def format_amount(value):
         """Format valid dashboard amounts while treating malformed values as zero."""
         if is_non_negative_number(value):
-            return f"{currency}{value:,.2f}"
-        return f"{currency}0.00"
+            return format_currency(value, currency)
+        return format_currency(0, currency)
 
     print("=" * 48)
     print("              CLINIC DASHBOARD")

@@ -9,6 +9,13 @@ CLINIC_CONFIG = {
 }
 
 
+def format_currency(amount, currency=None):
+    """Format a monetary amount consistently for display."""
+    if currency is None:
+        currency = CLINIC_CONFIG["currency"]
+    return f"{currency} {amount:,.2f}"
+
+
 def create_senior_discount_calculator(config):
     """Build a calculator that closes over the clinic's discount settings."""
     senior_age = config["senior_age"]
