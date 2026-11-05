@@ -3,6 +3,11 @@
 VALID_STATUSES = {"pending", "completed", "cancelled"}
 
 
+def normalize_id(value):
+    """Return an ID in its canonical form, or the original invalid value."""
+    return value.strip().upper() if isinstance(value, str) else value
+
+
 def is_non_negative_number(value):
     """Return whether value is a non-negative int or float, excluding bools."""
     return (
@@ -18,6 +23,8 @@ def validate_patient(patient_id, patients):
 
     if not isinstance(patients, dict):
         return False, "Patients must be provided as a dictionary."
+
+    patient_id = normalize_id(patient_id)
 
     if patient_id not in patients:
         return False, f"Patient {patient_id} does not exist."
@@ -41,6 +48,8 @@ def validate_doctor(doctor_id, doctors):
     if not isinstance(doctors, dict):
         return False, "Doctors must be provided as a dictionary."
 
+    doctor_id = normalize_id(doctor_id)
+
     if doctor_id not in doctors:
         return False, f"Doctor {doctor_id} does not exist."
 
@@ -53,6 +62,8 @@ def validate_doctor_availability(doctor_id, doctors):
 
     if not result[0]:
         return result
+
+    doctor_id = normalize_id(doctor_id)
 
     if doctors[doctor_id].get("available") is not True:
         return False, f"Doctor {doctor_id} is not available."
@@ -172,6 +183,7 @@ def validate_appointment(appointment, patients, doctors, test_prices):
         return False, "Appointment ID must be a non-empty string."
 
     patient_id = appointment.get("patient_id")
+    patient_id = normalize_id(patient_id)
     result = validate_patient(patient_id, patients)
 
     if not result[0]:
@@ -182,7 +194,7 @@ def validate_appointment(appointment, patients, doctors, test_prices):
     if not result[0]:
         return False, f"Invalid data for patient {patient_id}: {result[1]}"
 
-    doctor_id = appointment.get("doctor_id")
+    doctor_id = normalize_id(appointment.get("doctor_id"))
     result = validate_doctor_availability(doctor_id, doctors)
 
     if not result[0]:

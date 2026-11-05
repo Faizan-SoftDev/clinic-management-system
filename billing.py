@@ -14,7 +14,7 @@ def calculate_total(*charges):
 
         total += charge
 
-    return total
+    return round(total, 2)
 
 
 def calculate_test_charges(tests, test_prices):
@@ -29,7 +29,7 @@ def calculate_test_charges(tests, test_prices):
         for name, price in test_prices.items()
         if isinstance(name, str)
     }
-    return True, sum(prices[test.casefold()] for test in tests)
+    return True, round(sum(prices[test.casefold()] for test in tests), 2)
 
 
 def calculate_insurance_coverage(
@@ -67,18 +67,18 @@ def calculate_insurance_coverage(
 
     if not insurance:
         return True, {
-            "consultation_coverage": 0,
-            "test_coverage": 0,
-            "total_coverage": 0,
+            "consultation_coverage": 0.00,
+            "test_coverage": 0.00,
+            "total_coverage": 0.00,
         }
 
     consultation_coverage = consultation_fee * consultation_rate
     test_coverage = test_charges * test_rate
 
     return True, {
-        "consultation_coverage": consultation_coverage,
-        "test_coverage": test_coverage,
-        "total_coverage": consultation_coverage + test_coverage,
+        "consultation_coverage": round(consultation_coverage, 2),
+        "test_coverage": round(test_coverage, 2),
+        "total_coverage": round(consultation_coverage + test_coverage, 2),
     }
 
 
@@ -208,26 +208,27 @@ def calculate_bill(
         return False, insurance_result[1]
 
     coverage = insurance_result[1]
-    amount_after_insurance = subtotal - coverage["total_coverage"]
+    amount_after_insurance = round(subtotal - coverage["total_coverage"], 2)
 
     discount_calculator = create_senior_discount_calculator(config)
 
     if senior_discount:
-        discount_amount = discount_calculator(amount_after_insurance, age)
+        discount_amount = round(discount_calculator(amount_after_insurance, age), 2)
     else:
         discount_amount = 0
 
-    final_amount = amount_after_insurance - discount_amount
+    final_amount = round(amount_after_insurance - discount_amount, 2)
 
     return True, {
-        "consultation_fee": consultation_fee,
-        "test_charges": test_charges,
-        "subtotal": subtotal,
+        "consultation_fee": round(consultation_fee, 2),
+        "test_charges": round(test_charges, 2),
+        "subtotal": round(subtotal, 2),
         "consultation_coverage": coverage["consultation_coverage"],
         "test_coverage": coverage["test_coverage"],
         "insurance_coverage": coverage["total_coverage"],
-        "amount_after_insurance": amount_after_insurance,
-        "senior_discount": discount_amount,
+        "amount_after_insurance": round(amount_after_insurance, 2),
+        "senior_discount": round(discount_amount, 2),
         "final_bill": final_amount,
         "currency": currency,
     }
+

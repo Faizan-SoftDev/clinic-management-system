@@ -10,6 +10,7 @@ from reports import (
     generate_clinic_report,
     print_clinic_dashboard,
 )
+from validation import normalize_id
 
 
 def print_menu():
@@ -143,8 +144,8 @@ def handle_cancel_appointment():
 
 def handle_sample_bill():
     """Calculate a bill using patient and doctor records."""
-    patient_id = input("Enter patient ID: ").strip()
-    doctor_id = input("Enter doctor ID: ").strip()
+    patient_id = normalize_id(input("Enter patient ID: "))
+    doctor_id = normalize_id(input("Enter doctor ID: "))
 
     if patient_id not in patients:
         print(f"REJECTED | Patient {patient_id} does not exist.")
@@ -173,14 +174,19 @@ def handle_sample_bill():
         print("REJECTED | Patient insurance data is invalid.")
         return
 
+    tests_input = input(
+        "Medical tests separated by commas (leave empty for none): "
+    ).strip()
+    tests = [test.strip() for test in tests_input.split(",") if test.strip()]
+
     result = calculate_bill(
         doctor.get("fee"),
-        [],
+        tests,
         test_prices,
         patient["age"],
         insurance=patient["insurance"],
         senior_discount=True,
-        include_tests=False,
+        include_tests=True,
         config=CLINIC_CONFIG,
     )
 
@@ -195,6 +201,8 @@ def handle_sample_bill():
     print(f"Patient: {patient['name']}")
     print(f"Doctor: {doctor['name']}")
     print(f"Consultation fee: {currency}{bill['consultation_fee']:,.2f}")
+    print(f"Test charges: {currency}{bill['test_charges']:,.2f}")
+    print(f"Subtotal: {currency}{bill['subtotal']:,.2f}")
     print(f"Insurance coverage: {currency}{bill['insurance_coverage']:,.2f}")
     print(f"Senior discount: {currency}{bill['senior_discount']:,.2f}")
     print(f"Final amount: {currency}{bill['final_bill']:,.2f}")
@@ -257,9 +265,9 @@ def handle_patient_report():
 
 def handle_add_appointment():
     """Create a new pending appointment after validating its details."""
-    appointment_id = input("New appointment ID: ").strip()
-    patient_id = input("Patient ID: ").strip()
-    doctor_id = input("Doctor ID: ").strip()
+    appointment_id = normalize_id(input("New appointment ID: "))
+    patient_id = normalize_id(input("Patient ID: "))
+    doctor_id = normalize_id(input("Doctor ID: "))
     date = input("Appointment date (YYYY-MM-DD): ").strip()
     time_slot = input("Appointment time (HH:MM AM/PM): ").strip()
     tests_input = input(

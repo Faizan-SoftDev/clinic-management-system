@@ -3,6 +3,7 @@
 from copy import deepcopy
 from contextlib import redirect_stdout
 from pathlib import Path
+from datetime import date, timedelta
 import subprocess
 from io import StringIO
 import sys
@@ -394,16 +395,17 @@ def test_missing_bill_is_calculated_consistently_in_reports():
 
 def test_booking_rejects_duplicate_id_and_conflicting_slot():
     scheduled = []
+    future_date = (date.today() + timedelta(days=1)).isoformat()
     first = book_appointment(
-        "AT004", "P001", "D001", "2026-11-10", "10:00 AM", [],
+        "AT004", "P001", "D001", future_date, "10:00 AM", [],
         deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
     )
     duplicate_id = book_appointment(
-        "AT004", "P002", "D003", "2026-11-10", "11:00 AM", [],
+        "AT004", "P002", "D003", future_date, "11:00 AM", [],
         deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
     )
     collision = book_appointment(
-        "AT005", "P002", "D001", "2026-11-10", "10:00 AM", [],
+        "AT005", "P002", "D001", future_date, "10:00 AM", [],
         deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
     )
 
@@ -642,8 +644,8 @@ def test_dashboard_accepts_incomplete_report():
     output = StringIO()
     with redirect_stdout(output):
         print_clinic_dashboard({})
-    assert "Total Senior Citizen Discount: $0.00" in output.getvalue()
-    assert "Gross Consultation Charges: $0.00" in output.getvalue()
+    assert "Total Senior Citizen Discount: PKR0.00" in output.getvalue()
+    assert "Gross Consultation Charges: PKR0.00" in output.getvalue()
 
 
 def test_reports_handle_malformed_saved_bills_and_dashboard_values():
@@ -667,7 +669,57 @@ def test_reports_handle_malformed_saved_bills_and_dashboard_values():
         print_clinic_dashboard({"total_patient_revenue": "invalid"}, 123)
 
     assert report["total_patient_revenue"] == 0
-    assert "Total Patient Revenue: $0.00" in output.getvalue()
+    assert "Total Patient Revenue: PKR0.00" in output.getvalue()
+
+
+def test_time_and_id_normalization_and_past_date_rejection():
+    scheduled = []
+    future_date = (date.today() + timedelta(days=1)).isoformat()
+    first = book_appointment(
+        " at011 ", " p001 ", " d001 ", future_date, "10:00 am", [],
+        deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+    )
+    collision = book_appointment(
+        "at012", "p002", "d001", future_date, "10:00 AM", [],
+        deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+    )
+    past = book_appointment(
+        "at013", "p001", "d001", (date.today() - timedelta(days=1)).isoformat(),
+        "11:00 AM", [], deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), [],
+    )
+    assert first[0] is True
+    assert scheduled[0]["appointment_id"] == "AT011"
+    assert scheduled[0]["time_slot"] == "10:00 AM"
+    assert collision[0] is False
+    assert past[0] is False
+
+
+def test_default_currency_is_pkr():
+    assert CLINIC_CONFIG["currency"] == "PKR"
+    result = calculate_bill(100.129, [], {}, age=20)
+    assert result[0] is True
+    assert result[1]["currency"] == "PKR"
+    assert result[1]["consultation_fee"] == 100.13
+
+
+def test_dashboard_warns_about_unbilled_completed_visits():
+    from reports import print_clinic_dashboard
+
+    scheduled = [{
+        "appointment_id": " AT014 ",
+        "patient_id": "P001",
+        "doctor_id": "D001",
+        "status": "completed",
+        "tests": [],
+    }]
+    report = generate_clinic_report(
+        deepcopy(patients), deepcopy(doctors), scheduled,
+        deepcopy(test_prices), deepcopy(CLINIC_CONFIG),
+    )
+    output = StringIO()
+    with redirect_stdout(output):
+        print_clinic_dashboard(report)
+    assert "WARNING: Completed visits without saved bills:  AT014 " in output.getvalue()
 
 
 if __name__ == "__main__":
@@ -735,6 +787,11 @@ if __name__ == "__main__":
          test_dashboard_accepts_incomplete_report),
         ("Reports handle malformed values",
          test_reports_handle_malformed_saved_bills_and_dashboard_values),
+        ("Time, IDs, and dates are normalized and validated",
+         test_time_and_id_normalization_and_past_date_rejection),
+        ("Default currency is PKR", test_default_currency_is_pkr),
+        ("Dashboard warns about unbilled visits",
+         test_dashboard_warns_about_unbilled_completed_visits),
     ]
 
     for test_name, test_function in tests:

@@ -1,7 +1,8 @@
 """Management reports for the Clinic Management System."""
 
 from billing import calculate_bill
-from validation import is_non_negative_number
+from config import CLINIC_CONFIG
+from validation import is_non_negative_number, normalize_id
 
 
 def _is_valid_bill(bill):
@@ -34,8 +35,8 @@ def _get_bill(appointment, patients, doctors, test_prices, config=None):
     if appointment.get("processed") is True and _is_valid_bill(saved_bill):
         return saved_bill
 
-    patient_id = appointment.get("patient_id")
-    doctor_id = appointment.get("doctor_id")
+    patient_id = normalize_id(appointment.get("patient_id"))
+    doctor_id = normalize_id(appointment.get("doctor_id"))
 
     if (
         not isinstance(patient_id, str)
@@ -104,7 +105,7 @@ def generate_doctor_report(
 
         doctor_appointments = [
             item for item in records
-            if item.get("doctor_id") == doctor_id
+            if normalize_id(item.get("doctor_id")) == normalize_id(doctor_id)
         ]
 
         completed = [
@@ -124,8 +125,8 @@ def generate_doctor_report(
 
         bills = [bill for bill in bills if bill is not None]
 
-        revenue = sum(bill["final_bill"] for bill in bills)
-        average_bill = revenue / len(bills) if bills else 0
+        revenue = round(sum(bill["final_bill"] for bill in bills), 2)
+        average_bill = round(revenue / len(bills), 2) if bills else 0.00
 
         report[doctor_id] = {
             "doctor_name": doctor.get("name", "Unknown"),
@@ -156,7 +157,7 @@ def generate_patient_report(
 
         patient_appointments = [
             item for item in records
-            if item.get("patient_id") == patient_id
+            if normalize_id(item.get("patient_id")) == normalize_id(patient_id)
         ]
 
         completed = [
@@ -183,15 +184,15 @@ def generate_patient_report(
             "appointments": len(patient_appointments),
             "completed_appointments": len(completed),
             "cancelled_appointments": len(cancelled),
-            "total_medical_charges": sum(
+            "total_medical_charges": round(sum(
                 bill["subtotal"] for bill in bills
-            ),
-            "insurance_coverage": sum(
+            ), 2),
+            "insurance_coverage": round(sum(
                 bill["insurance_coverage"] for bill in bills
-            ),
-            "patient_paid": sum(
+            ), 2),
+            "patient_paid": round(sum(
                 bill["final_bill"] for bill in bills
-            ),
+            ), 2),
         }
 
     return report
@@ -244,25 +245,31 @@ def generate_clinic_report(
         if bill is not None
     ]
 
-    consultation_revenue = sum(
+    consultation_revenue = round(sum(
         bill["consultation_fee"] for _, bill in valid_bills
-    )
+    ), 2)
 
-    test_revenue = sum(
+    test_revenue = round(sum(
         bill["test_charges"] for _, bill in valid_bills
-    )
+    ), 2)
 
-    insurance_total = sum(
+    insurance_total = round(sum(
         bill["insurance_coverage"] for _, bill in valid_bills
-    )
+    ), 2)
 
-    senior_discount_total = sum(
+    senior_discount_total = round(sum(
         bill["senior_discount"] for _, bill in valid_bills
-    )
+    ), 2)
 
-    patient_revenue = sum(
+    patient_revenue = round(sum(
         bill["final_bill"] for _, bill in valid_bills
-    )
+    ), 2)
+
+    unbilled_completed_visits = [
+        item["appointment_id"]
+        for item in completed
+        if not _is_valid_bill(item.get("bill"))
+    ]
 
     # Equal counts retain the first entry in source insertion order.
     most_requested_doctor = max(
@@ -274,7 +281,7 @@ def generate_clinic_report(
     specialization_counts = {}
 
     for appointment in records:
-        doctor_id = appointment.get("doctor_id")
+        doctor_id = normalize_id(appointment.get("doctor_id"))
 
         if not isinstance(doctor_id, str):
             continue
@@ -356,19 +363,20 @@ def generate_clinic_report(
         "patients_without_completed_appointment": patients_without_completed,
         "insured_patients": insured_patients,
         "senior_citizen_patients": senior_patients,
+        "unbilled_completed_visits": unbilled_completed_visits,
         "doctor_report": doctor_report,
         "patient_report": patient_report,
     }
 
 
-def print_clinic_dashboard(report, currency="$"):
+def print_clinic_dashboard(report, currency=CLINIC_CONFIG["currency"]):
     """Display a readable clinic management dashboard."""
     if not isinstance(report, dict):
         print("Cannot display dashboard: invalid report.")
         return
 
     if not isinstance(currency, str):
-        currency = "$"
+        currency = CLINIC_CONFIG["currency"]
 
     def format_amount(value):
         """Format valid dashboard amounts while treating malformed values as zero."""
@@ -410,6 +418,12 @@ def print_clinic_dashboard(report, currency="$"):
         "Total Patient Revenue: "
         f"{format_amount(report.get('total_patient_revenue', 0))}"
     )
+    unbilled = report.get("unbilled_completed_visits", [])
+    if unbilled:
+        print(
+            "WARNING: Completed visits without saved bills: "
+            f"{', '.join(unbilled)}"
+        )
 
     specialization = report.get("most_requested_specialization")
 

@@ -4,6 +4,7 @@ from datetime import datetime
 
 from billing import calculate_bill
 from validation import (
+    normalize_id,
     validate_appointment,
     validate_appointment_status,
 )
@@ -18,14 +19,28 @@ def find_appointment(appointment_id, appointments):
     ):
         return None
 
+    appointment_id = normalize_id(appointment_id)
+
     for appointment in appointments:
         if (
             isinstance(appointment, dict)
-            and appointment.get("appointment_id") == appointment_id
+            and normalize_id(appointment.get("appointment_id")) == appointment_id
         ):
             return appointment
 
     return None
+
+
+def _normalize_time_slot(time_slot):
+    """Parse a time slot and return its canonical 12-hour representation."""
+    if not isinstance(time_slot, str):
+        return None
+    try:
+        return datetime.strptime(time_slot.strip(), "%I:%M %p").strftime(
+            "%I:%M %p"
+        )
+    except ValueError:
+        return None
 
 
 def book_appointment(
@@ -51,14 +66,21 @@ def book_appointment(
         return False, "Appointment time must use HH:MM AM/PM format."
 
     try:
-        datetime.strptime(date, "%Y-%m-%d")
+        appointment_date = datetime.strptime(date, "%Y-%m-%d").date()
     except ValueError:
         return False, "Appointment date must use YYYY-MM-DD format."
 
-    try:
-        datetime.strptime(time_slot, "%I:%M %p")
-    except ValueError:
+    normalized_time = _normalize_time_slot(time_slot)
+    if normalized_time is None:
         return False, "Appointment time must use HH:MM AM/PM format."
+
+    if appointment_date < datetime.today().date():
+        return False, "Appointment date cannot be in the past."
+
+    appointment_id = normalize_id(appointment_id)
+    patient_id = normalize_id(patient_id)
+    doctor_id = normalize_id(doctor_id)
+    time_slot = normalized_time
 
     appointment = {
         "appointment_id": appointment_id,
@@ -81,9 +103,9 @@ def book_appointment(
     for existing in appointments:
         if (
             isinstance(existing, dict)
-            and existing.get("doctor_id") == doctor_id
+            and normalize_id(existing.get("doctor_id")) == doctor_id
             and existing.get("date") == date
-            and existing.get("time_slot") == time_slot
+            and _normalize_time_slot(existing.get("time_slot")) == time_slot
             and existing.get("status") != "cancelled"
         ):
             return False, (
@@ -114,6 +136,7 @@ def process_appointment(
     if not isinstance(appointment_id, str) or not appointment_id.strip():
         return False, "Appointment ID must be a non-empty string."
 
+    appointment_id = normalize_id(appointment_id)
     appointment = find_appointment(appointment_id, appointments)
 
     if appointment is None:
@@ -123,7 +146,7 @@ def process_appointment(
         1
         for item in appointments
         if isinstance(item, dict)
-        and item.get("appointment_id") == appointment_id
+        and normalize_id(item.get("appointment_id")) == appointment_id
     ) > 1:
         return False, f"Duplicate appointment ID {appointment_id} exists."
 
@@ -151,8 +174,8 @@ def process_appointment(
     if not validation_result[0]:
         return False, validation_result[1]
 
-    patient = patients[appointment["patient_id"]]
-    doctor = doctors[appointment["doctor_id"]]
+    patient = patients[normalize_id(appointment["patient_id"])]
+    doctor = doctors[normalize_id(appointment["doctor_id"])]
 
     billing_options = {
         "insurance": patient["insurance"],
@@ -200,6 +223,7 @@ def cancel_appointment(appointment_id, appointments):
     if not isinstance(appointment_id, str) or not appointment_id.strip():
         return False, "Appointment ID must be a non-empty string."
 
+    appointment_id = normalize_id(appointment_id)
     appointment = find_appointment(appointment_id, appointments)
 
     if appointment is None:
@@ -209,7 +233,7 @@ def cancel_appointment(appointment_id, appointments):
         1
         for item in appointments
         if isinstance(item, dict)
-        and item.get("appointment_id") == appointment_id
+        and normalize_id(item.get("appointment_id")) == appointment_id
     ) > 1:
         return False, f"Duplicate appointment ID {appointment_id} exists."
 

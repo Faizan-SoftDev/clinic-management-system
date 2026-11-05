@@ -1,7 +1,7 @@
 """Central configuration for the clinic."""
 
 CLINIC_CONFIG = {
-    "currency": "$",
+    "currency": "PKR",
     "consultation_insurance_rate": 0.20,
     "test_insurance_rate": 0.50,
     "senior_age": 60,
