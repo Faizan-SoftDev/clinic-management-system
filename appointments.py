@@ -1,4 +1,6 @@
-"""Appointment processing and cancellation for the clinic."""
+"""Appointment booking, processing, and cancellation for the clinic."""
+
+from datetime import datetime
 
 from billing import calculate_bill
 from validation import (
@@ -24,6 +26,72 @@ def find_appointment(appointment_id, appointments):
             return appointment
 
     return None
+
+
+def book_appointment(
+    appointment_id,
+    patient_id,
+    doctor_id,
+    date,
+    time_slot,
+    tests,
+    patients,
+    doctors,
+    test_prices,
+    appointments,
+):
+    """Create a pending appointment with a valid, available time slot."""
+    if not isinstance(appointments, list):
+        return False, "Appointments must be provided as a list."
+
+    if not isinstance(date, str):
+        return False, "Appointment date must use YYYY-MM-DD format."
+
+    if not isinstance(time_slot, str):
+        return False, "Appointment time must use HH:MM AM/PM format."
+
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return False, "Appointment date must use YYYY-MM-DD format."
+
+    try:
+        datetime.strptime(time_slot, "%I:%M %p")
+    except ValueError:
+        return False, "Appointment time must use HH:MM AM/PM format."
+
+    appointment = {
+        "appointment_id": appointment_id,
+        "patient_id": patient_id,
+        "doctor_id": doctor_id,
+        "date": date,
+        "time_slot": time_slot,
+        "status": "pending",
+        "tests": tests,
+    }
+    validation_result = validate_appointment(
+        appointment, patients, doctors, test_prices
+    )
+    if not validation_result[0]:
+        return validation_result
+
+    if find_appointment(appointment_id, appointments) is not None:
+        return False, f"Appointment {appointment_id} already exists."
+
+    for existing in appointments:
+        if (
+            isinstance(existing, dict)
+            and existing.get("doctor_id") == doctor_id
+            and existing.get("date") == date
+            and existing.get("time_slot") == time_slot
+            and existing.get("status") != "cancelled"
+        ):
+            return False, (
+                f"Doctor {doctor_id} is already booked on {date} at {time_slot}."
+            )
+
+    appointments.append(appointment)
+    return True, f"Appointment {appointment_id} created as pending."
 
 
 def process_appointment(

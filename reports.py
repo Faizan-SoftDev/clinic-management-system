@@ -1,6 +1,24 @@
 """Management reports for the Clinic Management System."""
 
 from billing import calculate_bill
+from validation import is_non_negative_number
+
+
+def _is_valid_bill(bill):
+    """Return whether a saved bill has the numeric fields reports require."""
+    required_fields = {
+        "consultation_fee",
+        "test_charges",
+        "subtotal",
+        "insurance_coverage",
+        "senior_discount",
+        "final_bill",
+    }
+    return (
+        isinstance(bill, dict)
+        and required_fields.issubset(bill)
+        and all(is_non_negative_number(bill[field]) for field in required_fields)
+    )
 
 
 def _get_bill(appointment, patients, doctors, test_prices, config=None):
@@ -13,7 +31,7 @@ def _get_bill(appointment, patients, doctors, test_prices, config=None):
 
     saved_bill = appointment.get("bill")
 
-    if appointment.get("processed") is True and isinstance(saved_bill, dict):
+    if appointment.get("processed") is True and _is_valid_bill(saved_bill):
         return saved_bill
 
     patient_id = appointment.get("patient_id")
@@ -293,7 +311,9 @@ def generate_clinic_report(
     )
 
     # Required comprehensions.
-    senior_age = (config or {}).get("senior_age", 60)
+    senior_age = config.get("senior_age", 60) if isinstance(config, dict) else 60
+    if isinstance(senior_age, bool) or not isinstance(senior_age, int):
+        senior_age = 60
 
     insured_patients = [
         patient_id
@@ -347,6 +367,15 @@ def print_clinic_dashboard(report, currency="$"):
         print("Cannot display dashboard: invalid report.")
         return
 
+    if not isinstance(currency, str):
+        currency = "$"
+
+    def format_amount(value):
+        """Format valid dashboard amounts while treating malformed values as zero."""
+        if is_non_negative_number(value):
+            return f"{currency}{value:,.2f}"
+        return f"{currency}0.00"
+
     print("=" * 48)
     print("              CLINIC DASHBOARD")
     print("=" * 48)
@@ -359,27 +388,27 @@ def print_clinic_dashboard(report, currency="$"):
     print(f"Pending: {report.get('pending', 0)}")
 
     print(
-        "Total Consultation Revenue: "
-        f"{currency}{report.get('total_consultation_revenue', 0):,.2f}"
+        "Gross Consultation Charges: "
+        f"{format_amount(report.get('total_consultation_revenue', 0))}"
     )
 
     print(
-        "Total Test Revenue: "
-        f"{currency}{report.get('total_test_revenue', 0):,.2f}"
+        "Gross Test Charges: "
+        f"{format_amount(report.get('total_test_revenue', 0))}"
     )
 
     print(
         "Total Insurance Coverage: "
-        f"{currency}{report.get('total_insurance_coverage', 0):,.2f}"
+        f"{format_amount(report.get('total_insurance_coverage', 0))}"
     )
     print(
         f"Total Senior Citizen Discount: "
-        f"{currency}{report.get('total_senior_discount', 0):,.2f}"
+        f"{format_amount(report.get('total_senior_discount', 0))}"
     )
 
     print(
         "Total Patient Revenue: "
-        f"{currency}{report.get('total_patient_revenue', 0):,.2f}"
+        f"{format_amount(report.get('total_patient_revenue', 0))}"
     )
 
     specialization = report.get("most_requested_specialization")

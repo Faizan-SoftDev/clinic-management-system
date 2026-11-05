@@ -13,6 +13,8 @@ there is no database, file storage, framework, or third-party dependency.
 - Validate appointment details and reject invalid or duplicate operations
   with a reason.
 - Process pending appointments once and cancel pending appointments.
+- Book appointments with a valid date and time, preventing a doctor's
+  active appointments from sharing a time slot.
 - Generate clinic, doctor, and patient reports.
 - Support configurable billing options through `**kwargs`, and total multiple
   charges with `*args`.
@@ -54,9 +56,9 @@ Total Appointments: 4
 Completed: 3
 Cancelled: 1
 Pending: 0
-Total Consultation Revenue: $12,000.00
-Total Test Revenue: $4,000.00
-Total Insurance Coverage: $3,250.00
+Gross Consultation Charges: $12,000.00
+Gross Test Charges: $4,000.00
+Total Insurance Coverage: $2,250.00
 Total Senior Citizen Discount: $650.00
 Total Patient Revenue: $13,100.00
 Most Requested Specialization: Cardiology
@@ -71,14 +73,14 @@ Senior Citizen Patients: P004
 
 ## 5. Tests
 
-Start the application by running `app.py` from PyCharm, or from the project
-directory with:
+Start the application from the project directory with either:
 
 ```bash
-python3 app.py
+python3 main.py
+# or
+python3 .
 ```
 
-In PyCharm, choose the shared **Clinic Management System** run configuration.
 Running `data.py` directly only loads the starter records; it does not start
 the interactive menu.
 
@@ -90,10 +92,22 @@ python3 test_clinic.py
 
 The tests cover billing and discount calculations, validation, processing and
 cancellation, duplicate and unavailable records, case-insensitive tests,
-reports, and incomplete dashboard data. `test_clinic.py` also exposes
+appointment scheduling collisions, malformed report data, reports, and
+incomplete dashboard data. `test_clinic.py` also exposes
 `test_*` functions that can be collected by pytest if it is available.
 
-## 6. Project structure
+## 6. Design decisions
+
+The project follows single-responsibility design without classes, as required
+by the assignment: `validation.py` checks input, `billing.py` calculates
+charges, `appointments.py` changes appointment state, `reports.py` derives
+read-only statistics, and `main.py` only handles terminal input/output.
+Functions return `(success, result_or_reason)` so invalid data is rejected
+cleanly instead of crashing the program. The configuration is passed into
+billing/report functions when needed, while the default remains read-only;
+the senior-discount closure demonstrates local and enclosing (LEGB) scope.
+
+## 7. Project structure
 
 ```text
 clinic-management-system/

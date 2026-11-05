@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 from contextlib import redirect_stdout
+from pathlib import Path
+import subprocess
 from io import StringIO
 import sys
 
@@ -16,7 +18,7 @@ from validation import (
 )
 
 from billing import calculate_bill, calculate_total
-from appointments import process_appointment, cancel_appointment
+from appointments import book_appointment, process_appointment, cancel_appointment
 from reports import (
     generate_clinic_report,
     generate_doctor_report,
@@ -335,6 +337,7 @@ def test_clinic_report():
 
 
 def test_saved_seed_bills_keep_historical_prices():
+    assert appointments[0]["bill"]["final_bill"] == 5250
     test_doctors = deepcopy(doctors)
     test_doctors["D001"]["fee"] = "invalid"
     report = generate_clinic_report(
@@ -346,6 +349,110 @@ def test_saved_seed_bills_keep_historical_prices():
     )
 
     assert report["total_patient_revenue"] == 13100
+    assert report["total_consultation_revenue"] == 12000
+    assert report["total_test_revenue"] == 4000
+    assert report["total_insurance_coverage"] == 2250
+    assert report["total_senior_discount"] == 650
+
+
+def test_invalid_config_is_rejected():
+    invalid_config = deepcopy(CLINIC_CONFIG)
+    invalid_config["senior_discount_rate"] = 5
+    result = calculate_bill(
+        5000, [], deepcopy(test_prices), age=67,
+        insurance=False, config=invalid_config,
+    )
+    assert result[0] is False
+
+
+def test_missing_bill_is_calculated_consistently_in_reports():
+    scheduled = deepcopy(appointments)
+    scheduled.append({
+        "appointment_id": "AT010",
+        "patient_id": "P002",
+        "doctor_id": "D003",
+        "status": "completed",
+        "tests": [],
+    })
+    clinic_report = generate_clinic_report(
+        deepcopy(patients), deepcopy(doctors), scheduled,
+        deepcopy(test_prices), deepcopy(CLINIC_CONFIG),
+    )
+    doctor_report = generate_doctor_report(
+        deepcopy(patients), deepcopy(doctors), scheduled,
+        deepcopy(test_prices), deepcopy(CLINIC_CONFIG),
+    )
+    patient_report = generate_patient_report(
+        deepcopy(patients), deepcopy(doctors), scheduled,
+        deepcopy(test_prices), deepcopy(CLINIC_CONFIG),
+    )
+
+    assert clinic_report["total_patient_revenue"] == 15100
+    assert doctor_report["D003"]["total_revenue"] == 4000
+    assert patient_report["P002"]["patient_paid"] == 4000
+
+
+def test_booking_rejects_duplicate_id_and_conflicting_slot():
+    scheduled = []
+    first = book_appointment(
+        "AT004", "P001", "D001", "2026-11-10", "10:00 AM", [],
+        deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+    )
+    duplicate_id = book_appointment(
+        "AT004", "P002", "D003", "2026-11-10", "11:00 AM", [],
+        deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+    )
+    collision = book_appointment(
+        "AT005", "P002", "D001", "2026-11-10", "10:00 AM", [],
+        deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+    )
+
+    assert first[0] is True
+    assert duplicate_id[0] is False
+    assert collision[0] is False
+
+
+def test_booking_rejects_invalid_date_and_time():
+    scheduled = []
+    invalid_date = book_appointment(
+        "AT006", "P001", "D001", "banana", "10:00 AM", [],
+        deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+    )
+    invalid_time = book_appointment(
+        "AT007", "P001", "D001", "2026-11-10", "25:99", [],
+        deepcopy(patients), deepcopy(doctors), deepcopy(test_prices), scheduled,
+    )
+
+    assert invalid_date[0] is False
+    assert invalid_time[0] is False
+
+
+def test_process_rejects_unknown_records():
+    scheduled = [{
+        "appointment_id": "AT008",
+        "patient_id": "P999",
+        "doctor_id": "D999",
+        "status": "pending",
+        "tests": [],
+    }]
+    result = process_appointment(
+        "AT008", deepcopy(patients), deepcopy(doctors), scheduled,
+        deepcopy(test_prices), deepcopy(CLINIC_CONFIG),
+    )
+    assert result[0] is False
+
+
+def test_package_entry_point_starts():
+    result = subprocess.run(
+        [sys.executable, "."],
+        input="0\n",
+        text=True,
+        capture_output=True,
+        cwd=Path(__file__).parent,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Welcome to the Clinic Management System" in result.stdout
 
 
 def test_doctor_report():
@@ -536,6 +643,31 @@ def test_dashboard_accepts_incomplete_report():
     with redirect_stdout(output):
         print_clinic_dashboard({})
     assert "Total Senior Citizen Discount: $0.00" in output.getvalue()
+    assert "Gross Consultation Charges: $0.00" in output.getvalue()
+
+
+def test_reports_handle_malformed_saved_bills_and_dashboard_values():
+    from reports import print_clinic_dashboard
+
+    scheduled = [{
+        "appointment_id": "AT009",
+        "patient_id": "P001",
+        "doctor_id": "D001",
+        "status": "completed",
+        "tests": [],
+        "processed": True,
+        "bill": {"final_bill": "not a number"},
+    }]
+    report = generate_clinic_report(
+        deepcopy(patients), deepcopy(doctors), scheduled,
+        deepcopy(test_prices), "invalid configuration",
+    )
+    output = StringIO()
+    with redirect_stdout(output):
+        print_clinic_dashboard({"total_patient_revenue": "invalid"}, 123)
+
+    assert report["total_patient_revenue"] == 0
+    assert "Total Patient Revenue: $0.00" in output.getvalue()
 
 
 if __name__ == "__main__":
@@ -562,6 +694,15 @@ if __name__ == "__main__":
         ("Generate clinic report", test_clinic_report),
         ("Seed bills preserve historical prices",
          test_saved_seed_bills_keep_historical_prices),
+        ("Invalid configuration is rejected", test_invalid_config_is_rejected),
+        ("Missing bills are reported consistently",
+         test_missing_bill_is_calculated_consistently_in_reports),
+        ("Booking rejects duplicate IDs and slot conflicts",
+         test_booking_rejects_duplicate_id_and_conflicting_slot),
+        ("Booking rejects invalid date and time",
+         test_booking_rejects_invalid_date_and_time),
+        ("Processing rejects unknown records", test_process_rejects_unknown_records),
+        ("Package entry point starts", test_package_entry_point_starts),
         ("Generate doctor report", test_doctor_report),
         ("Generate patient report", test_patient_report),
         ("Age 59: no senior discount", test_age_59_no_senior_discount),
@@ -592,6 +733,8 @@ if __name__ == "__main__":
          test_test_names_are_case_insensitive),
         ("Dashboard accepts incomplete report",
          test_dashboard_accepts_incomplete_report),
+        ("Reports handle malformed values",
+         test_reports_handle_malformed_saved_bills_and_dashboard_values),
     ]
 
     for test_name, test_function in tests:

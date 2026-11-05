@@ -107,5 +107,6 @@ for appointment in appointments:
         include_tests=True,
         config=CLINIC_CONFIG,
     )
-    appointment["bill"] = result[1]
-    appointment["processed"] = True
+    if result[0]:
+        appointment["bill"] = result[1]
+        appointment["processed"] = True

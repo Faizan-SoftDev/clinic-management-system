@@ -2,7 +2,7 @@
 
 from data import patients, doctors, appointments, test_prices
 from config import CLINIC_CONFIG
-from appointments import find_appointment, process_appointment, cancel_appointment
+from appointments import book_appointment, process_appointment, cancel_appointment
 from billing import calculate_bill
 from reports import (
     generate_doctor_report,
@@ -10,7 +10,6 @@ from reports import (
     generate_clinic_report,
     print_clinic_dashboard,
 )
-from validation import validate_appointment
 
 
 def print_menu():
@@ -90,6 +89,8 @@ def display_appointments():
             f"{appointment.get('appointment_id', 'Unknown')} | "
             f"Patient: {appointment.get('patient_id', 'Unknown')} | "
             f"Doctor: {appointment.get('doctor_id', 'Unknown')} | "
+            f"Date: {appointment.get('date', 'Not scheduled')} | "
+            f"Time: {appointment.get('time_slot', 'Not scheduled')} | "
             f"Status: {appointment.get('status', 'Unknown')} | "
             f"Tests: {appointment.get('tests', [])}"
         )
@@ -100,12 +101,12 @@ def handle_process_appointment():
     appointment_id = input("Enter appointment ID: ").strip()
 
     success, result = process_appointment(
-        appointment_id,
-        patients,
-        doctors,
-        appointments,
-        test_prices,
-        CLINIC_CONFIG,
+        appointment_id=appointment_id,
+        patients=patients,
+        doctors=doctors,
+        appointments=appointments,
+        test_prices=test_prices,
+        config=CLINIC_CONFIG,
     )
 
     if not success:
@@ -259,33 +260,11 @@ def handle_add_appointment():
     appointment_id = input("New appointment ID: ").strip()
     patient_id = input("Patient ID: ").strip()
     doctor_id = input("Doctor ID: ").strip()
+    date = input("Appointment date (YYYY-MM-DD): ").strip()
+    time_slot = input("Appointment time (HH:MM AM/PM): ").strip()
     tests_input = input(
         "Medical tests separated by commas (leave empty for none): "
     ).strip()
-
-    if not appointment_id:
-        print("REJECTED | Appointment ID cannot be empty.")
-        return
-
-    if find_appointment(appointment_id, appointments) is not None:
-        print(f"REJECTED | Appointment {appointment_id} already exists.")
-        return
-
-    if patient_id not in patients:
-        print(f"REJECTED | Patient {patient_id} does not exist.")
-        return
-
-    if doctor_id not in doctors:
-        print(f"REJECTED | Doctor {doctor_id} does not exist.")
-        return
-
-    if not isinstance(patients[patient_id], dict):
-        print(f"REJECTED | Patient {patient_id} has invalid data.")
-        return
-
-    if not isinstance(doctors[doctor_id], dict):
-        print(f"REJECTED | Doctor {doctor_id} has invalid data.")
-        return
 
     tests = [
         test.strip()
@@ -293,26 +272,24 @@ def handle_add_appointment():
         if test.strip()
     ]
 
-    new_appointment = {
-        "appointment_id": appointment_id,
-        "patient_id": patient_id,
-        "doctor_id": doctor_id,
-        "status": "pending",
-        "tests": tests,
-    }
-
-    # Validate the complete appointment before changing the records.
-    result = validate_appointment(
-        new_appointment, patients, doctors, test_prices
+    result = book_appointment(
+        appointment_id,
+        patient_id,
+        doctor_id,
+        date,
+        time_slot,
+        tests,
+        patients,
+        doctors,
+        test_prices,
+        appointments,
     )
 
     if not result[0]:
         print(f"REJECTED | Reason: {result[1]}")
         return
 
-    appointments.append(new_appointment)
-
-    print(f"SUCCESS | Appointment {appointment_id} created as pending.")
+    print(f"SUCCESS | {result[1]}")
 
 
 def main():
