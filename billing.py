@@ -14,16 +14,11 @@ def calculate_total(*charges):
 
         total += charge
 
-    # Keep return types consistently predictable across operations
-    return True, total
+    return total
 
 
 def calculate_test_charges(tests, test_prices):
     """Calculate medical test charges after validating the test list."""
-    # Defensive type check before triggering downstream validation functions
-    if not isinstance(test_prices, dict):
-        return False, "Test prices must be provided as a dictionary."
-
     validation_result = validate_tests(tests, test_prices)
 
     if not validation_result[0]:
@@ -94,7 +89,19 @@ def calculate_bill(
     age=0,
     **options,
 ):
-    """Calculate the final patient bill safely with fixed tuple-unpacker schemas."""
+    """
+    Calculate the final patient bill.
+
+    Supported options:
+        insurance: bool, defaults to False
+        senior_discount: bool, defaults to True
+        include_tests: bool, defaults to True
+        config: optional clinic configuration dictionary
+
+    Returns:
+        (True, bill_details) on success.
+        (False, error_message) on invalid input.
+    """
     allowed_options = {
         "insurance",
         "senior_discount",
@@ -149,8 +156,8 @@ def calculate_bill(
 
     currency = config["currency"]
 
-    if not isinstance(currency, str) or not currency.strip():
-        return False, "Currency must be a non-empty string."
+    if not isinstance(currency, str):
+        return False, "Currency must be a string."
 
     if (
         isinstance(config["senior_age"], bool)
@@ -170,6 +177,9 @@ def calculate_bill(
     if test_prices is None:
         test_prices = {}
 
+    if not isinstance(test_prices, dict):
+        return False, "Test prices must be provided as a dictionary."
+
     if include_tests:
         test_result = calculate_test_charges(tests, test_prices)
 
@@ -182,11 +192,10 @@ def calculate_bill(
 
     subtotal_result = calculate_total(consultation_fee, test_charges)
 
-    # Fixed: Safely unpack the updated boolean result schema
-    if not subtotal_result[0]:
-        return False, subtotal_result[1]
+    if isinstance(subtotal_result, tuple):
+        return subtotal_result
 
-    subtotal = subtotal_result[1]
+    subtotal = subtotal_result
 
     insurance_result = calculate_insurance_coverage(
         consultation_fee,

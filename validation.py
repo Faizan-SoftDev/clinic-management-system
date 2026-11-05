@@ -1,148 +1,206 @@
-"""Validation guardrails for clinic data structures and appointments."""
+"""Validation functions for the Clinic Management System."""
 
-from typing import Dict, List, Any, Tuple
-
-
-def is_non_negative_number(val: Any) -> bool:
-    """Return True if value is an int/float and >= 0."""
-    return isinstance(val, (int, float)) and not isinstance(val, bool) and val >= 0
+VALID_STATUSES = {"pending", "completed", "cancelled"}
 
 
-def validate_patient(patient_id: str, patients: Dict[str, Any]) -> Tuple[bool, str]:
-    """Validate patient existence."""
+def is_non_negative_number(value):
+    """Return whether value is a non-negative int or float, excluding bools."""
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and value >= 0
+    )
+
+
+def validate_patient(patient_id, patients):
     if not isinstance(patient_id, str) or not patient_id.strip():
         return False, "Patient ID must be a non-empty string."
+
     if not isinstance(patients, dict):
-        return False, "Patients repository must be a dictionary."
+        return False, "Patients must be provided as a dictionary."
+
     if patient_id not in patients:
-        return False, f"Patient '{patient_id}' not found."
-    return True, "Patient exists."
+        return False, f"Patient {patient_id} does not exist."
 
+    patient = patients[patient_id]
 
-def validate_patient_data(patient: Dict[str, Any]) -> Tuple[bool, str]:
-    """Validate patient demographic schema."""
     if not isinstance(patient, dict):
         return False, "Patient data must be a dictionary."
-    if "name" not in patient or not isinstance(patient["name"], str) or not patient["name"].strip():
-        return False, "Patient name must be a non-empty string."
-    if "age" not in patient or not isinstance(patient["age"], int) or patient["age"] < 0:
+
+    age = patient.get("age")
+
+    if isinstance(age, bool) or not isinstance(age, int) or age < 0:
         return False, "Patient age must be a non-negative integer."
-    return True, "Patient data is valid."
 
-
-def validate_doctor(doctor_id: str, doctors: Dict[str, Any]) -> Tuple[bool, str]:
-    """Validate doctor existence."""
+    return True, "Patient exists."
+def validate_doctor(doctor_id, doctors):
+    """Check whether a doctor exists."""
     if not isinstance(doctor_id, str) or not doctor_id.strip():
         return False, "Doctor ID must be a non-empty string."
+
     if not isinstance(doctors, dict):
-        return False, "Doctors repository must be a dictionary."
+        return False, "Doctors must be provided as a dictionary."
+
     if doctor_id not in doctors:
-        return False, f"Doctor '{doctor_id}' not found."
+        return False, f"Doctor {doctor_id} does not exist."
+
     return True, "Doctor exists."
 
 
-def validate_doctor_availability(doctor_id: str, doctors: Dict[str, Any]) -> Tuple[bool, str]:
-    """Validate doctor existence and operational availability."""
-    res = validate_doctor(doctor_id, doctors)
-    if not res[0]:
-        return res
-    doc = doctors[doctor_id]
-    if not isinstance(doc, dict) or not doc.get("available", True):
-        return False, f"Doctor '{doctor_id}' is currently unavailable."
+def validate_doctor_availability(doctor_id, doctors):
+    """Check whether an existing doctor is available."""
+    result = validate_doctor(doctor_id, doctors)
+
+    if not result[0]:
+        return result
+
+    if doctors[doctor_id].get("available") is not True:
+        return False, f"Doctor {doctor_id} is not available."
+
     return True, "Doctor is available."
 
 
-def validate_doctor_data(doctor: Dict[str, Any]) -> Tuple[bool, str]:
-    """Validate doctor profile schema."""
-    if not isinstance(doctor, dict):
-        return False, "Doctor data must be a dictionary."
-    if "name" not in doctor or not isinstance(doctor["name"], str) or not doctor["name"].strip():
-        return False, "Doctor name must be a non-empty string."
-    if "fee" not in doctor or not is_non_negative_number(doctor["fee"]):
-        return False, "Doctor fee must be a non-negative number."
-    return True, "Doctor data is valid."
+def validate_appointment_status(status):
+    """Accept only the supported appointment statuses."""
+    if not isinstance(status, str):
+        return False, "Appointment status must be a string."
+
+    if status not in VALID_STATUSES:
+        return False, (
+            f"Invalid appointment status '{status}'. "
+            f"Allowed statuses: {', '.join(sorted(VALID_STATUSES))}."
+        )
+
+    return True, "Appointment status is valid."
 
 
-def validate_appointment_status(status: str) -> Tuple[bool, str]:
-    """Check status against valid choices."""
-    allowed = {"pending", "completed", "cancelled"}
-    if not isinstance(status, str) or status not in allowed:
-        return False, f"Invalid appointment status '{status}'. Must be one of: {allowed}"
-    return True, "Valid appointment status."
-
-
-def validate_tests(tests: List[str], test_prices: Dict[str, float]) -> Tuple[bool, str]:
-    """Validate medical test lists and reject unknown or duplicate tests."""
+def validate_tests(tests, test_prices):
+    """Validate the test list, including invalid and duplicate tests."""
     if not isinstance(tests, list):
         return False, "Tests must be provided as a list."
+
     if not isinstance(test_prices, dict):
         return False, "Test prices must be provided as a dictionary."
 
-    normalized_prices = {}
-    for name, price in test_prices.items():
-        if not isinstance(name, str):
-            return False, "All test directory master keys must be strings."
-        if not is_non_negative_number(price):
-            return False, f"Invalid price setup for medical test '{name}'."
-        normalized_prices[name.casefold()] = price
-
+    normalized_prices = {
+        name.casefold(): price
+        for name, price in test_prices.items()
+        if isinstance(name, str)
+    }
     seen_tests = set()
+
     for test in tests:
         if not isinstance(test, str) or not test.strip():
-            return False, "Test name must be a non-empty string."
-        norm_test = test.casefold()
-        if norm_test not in normalized_prices:
-            return False, f"Unknown medical test '{test}'."
-        if norm_test in seen_tests:
+            return False, "Each test name must be a non-empty string."
+
+        normalized_test = test.casefold()
+
+        if normalized_test not in normalized_prices:
+            return False, f"Medical test '{test}' does not exist."
+
+        if normalized_test in seen_tests:
             return False, f"Duplicate medical test '{test}' is not allowed."
-        seen_tests.add(norm_test)
+
+        price = normalized_prices[normalized_test]
+
+        if not is_non_negative_number(price):
+            return False, f"Invalid price for medical test '{test}'."
+
+        seen_tests.add(normalized_test)
 
     return True, "All medical tests are valid."
 
 
-def validate_appointment(
-    appointment: Dict[str, Any],
-    patients: Dict[str, Any],
-    doctors: Dict[str, Any],
-    test_prices: Dict[str, float],
-    active_appointments: Any = None,
-) -> Tuple[bool, str]:
-    """Validate appointment structure, dependencies, and duplicate ID presence."""
+def validate_patient_data(patient):
+    """Validate the required patient fields and age."""
+    if not isinstance(patient, dict):
+        return False, "Patient data must be a dictionary."
+
+    name = patient.get("name")
+    age = patient.get("age")
+    city = patient.get("city")
+    insurance = patient.get("insurance")
+
+    if not isinstance(name, str) or not name.strip():
+        return False, "Patient name must be a non-empty string."
+
+    if isinstance(age, bool) or not isinstance(age, int) or age < 0:
+        return False, "Patient age must be a non-negative integer."
+
+    if not isinstance(city, str) or not city.strip():
+        return False, "Patient city must be a non-empty string."
+
+    if not isinstance(insurance, bool):
+        return False, "Patient insurance must be True or False."
+
+    return True, "Patient data is valid."
+
+
+def validate_doctor_data(doctor):
+    """Validate the required doctor fields."""
+    if not isinstance(doctor, dict):
+        return False, "Doctor data must be a dictionary."
+
+    name = doctor.get("name")
+    specialization = doctor.get("specialization")
+    fee = doctor.get("fee")
+    available = doctor.get("available")
+
+    if not isinstance(name, str) or not name.strip():
+        return False, "Doctor name must be a non-empty string."
+
+    if not isinstance(specialization, str) or not specialization.strip():
+        return False, "Doctor specialization must be a non-empty string."
+
+    if not is_non_negative_number(fee):
+        return False, "Doctor fee must be a non-negative number."
+
+    if not isinstance(available, bool):
+        return False, "Doctor availability must be True or False."
+
+    return True, "Doctor data is valid."
+
+
+def validate_appointment(appointment, patients, doctors, test_prices):
+    """Validate an appointment without changing any clinic data."""
     if not isinstance(appointment, dict):
         return False, "Appointment must be a dictionary."
 
-    app_id = appointment.get("appointment_id")
-    if not isinstance(app_id, str) or not app_id.strip():
+    appointment_id = appointment.get("appointment_id")
+
+    if not isinstance(appointment_id, str) or not appointment_id.strip():
         return False, "Appointment ID must be a non-empty string."
 
-    pid = appointment.get("patient_id")
-    res = validate_patient(pid, patients)
-    if not res[0]:
-        return res
-    res = validate_patient_data(patients[pid])
-    if not res[0]:
-        return False, f"Invalid data for patient {pid}: {res[1]}"
+    patient_id = appointment.get("patient_id")
+    result = validate_patient(patient_id, patients)
 
-    did = appointment.get("doctor_id")
-    res = validate_doctor_availability(did, doctors)
-    if not res[0]:
-        return res
-    res = validate_doctor_data(doctors[did])
-    if not res[0]:
-        return False, f"Invalid data for doctor {did}: {res[1]}"
+    if not result[0]:
+        return result
 
-    res = validate_appointment_status(appointment.get("status", "pending"))
-    if not res[0]:
-        return res
+    result = validate_patient_data(patients[patient_id])
 
-    res = validate_tests(appointment.get("tests", []), test_prices)
-    if not res[0]:
-        return res
+    if not result[0]:
+        return False, f"Invalid data for patient {patient_id}: {result[1]}"
 
-    if active_appointments:
-        apps_list = active_appointments.values() if isinstance(active_appointments, dict) else active_appointments
-        for active in apps_list:
-            if isinstance(active, dict) and active.get("appointment_id") == app_id:
-                return False, f"Appointment ID '{app_id}' already exists."
+    doctor_id = appointment.get("doctor_id")
+    result = validate_doctor_availability(doctor_id, doctors)
+
+    if not result[0]:
+        return result
+
+    result = validate_doctor_data(doctors[doctor_id])
+
+    if not result[0]:
+        return False, f"Invalid data for doctor {doctor_id}: {result[1]}"
+
+    result = validate_appointment_status(appointment.get("status"))
+
+    if not result[0]:
+        return result
+
+    result = validate_tests(appointment.get("tests"), test_prices)
+
+    if not result[0]:
+        return result
 
     return True, "Appointment data is valid."
